@@ -1,5 +1,5 @@
 """
-Interactive chat for the multi-agent system.
+Interactive chat for the multi-agent API debugger system.
 """
 
 from langchain_core.messages import HumanMessage
@@ -9,31 +9,34 @@ from .graph import app
 
 def print_welcome():
     """Shows the welcome message and system capabilities."""
-    print("=" * 60)
-    print("🤖 MULTI-AGENT CHATBOT (LangGraph 0.3.x)")
-    print("=" * 60)
+    print("=" * 70)
+    print("🤖 MULTI-AGENT API DEBUGGER")
+    print("=" * 70)
     print()
-    print("📋 AVAILABLE TOOLS:")
-    print("  🔧 CALCULATOR: Mathematical operations (e.g: 12*7, 5+3, 10/2)")
-    print("  ⏰ TIME: Query current time (e.g: what time is it?)")
-    print(
-        "  📚 RAG: Document search (e.g: summarize the manual, search for information)"
-    )
+    print("📋 SYSTEM CAPABILITIES:")
+    print("  🔧 API OPERATIONS: Run jobs, get results, check system status")
+    print("  🐞 ERROR DEBUGGING: Analyze failures and provide root cause analysis")
+    print("  📚 KNOWLEDGE BASE: Answer questions about the system and API")
+    print("  📝 RESPONSE SYNTHESIS: Format and present results clearly")
     print()
-    print("💡 TYPES OF QUESTIONS YOU CAN ASK:")
-    print("  • Calculations: 'What is 15*8?', 'calculate 100-25'")
-    print("  • Time: 'What time is it?', 'tell me the current time'")
-    print("  • Documents: 'summarize the manual', 'search for information about X'")
-    print(
-        "  • PARALLEL: 'What is 2+3 and 8/2?', 'tell me the time and search the manual'"
-    )
-    print(
-        "  • SEQUENTIAL: 'sum of 3x8 and 129/3', 'search for information about tasks for this time'"
-    )
-    print("  • General questions: 'can you help me?' (goes to RAG)")
+    print("💡 EXAMPLE COMMANDS:")
+    print("  • API Operations:")
+    print("    - 'list all jobs' - Show available jobs")
+    print("    - 'run job data_processing' - Execute a specific job")
+    print("    - 'get job results job_001' - Get results for a job")
+    print("    - 'check system status' - Monitor system health")
     print()
-    print("🚪 To exit type: 'bye' or 'exit'")
-    print("=" * 60)
+    print("  • Debugging:")
+    print("    - 'debug job_003' - Analyze why job_003 failed")
+    print("    - 'investigate the error' - Debug the last error")
+    print()
+    print("  • Knowledge Queries:")
+    print("    - 'what is the API?' - Learn about the API")
+    print("    - 'how do I authenticate?' - Get authentication help")
+    print("    - 'explain job templates' - Learn about templates")
+    print()
+    print("🚪 To exit type: 'bye', 'exit', or 'quit'")
+    print("=" * 70)
     print()
 
 
@@ -60,7 +63,9 @@ def print_debug_state(state: dict, route: str):
     print()
 
 
-def run_chat(debug_mode: bool = False, history_mode: bool = False):
+def run_chat(
+    debug_mode: bool = False, history_mode: bool = False, thread_id: str = "default"
+):
     """Runs the interactive chat."""
     print_welcome()
 
@@ -71,11 +76,8 @@ def run_chat(debug_mode: bool = False, history_mode: bool = False):
         print("📜 [HISTORY] History mode activated - chat history will be shown")
         print()
 
-    print("💬 Hello! I'm your multi-agent assistant. How can I help you?")
+    print("💬 Hello! I'm your multi-agent API debugger. How can I help you?")
     print()
-
-    # Use a fixed thread_id for the entire chat session
-    thread_id = "chat_session"
 
     # Counter to track assistant messages shown
     ai_messages_shown = 0
@@ -101,12 +103,15 @@ def run_chat(debug_mode: bool = False, history_mode: bool = False):
             # Create initial state with user message
             state = {
                 "messages": [HumanMessage(content=user_input)],
-                "route": None,
-                "operations": None,
-                "steps": None,
+                "goal": user_input,
+                "todo_list": None,
                 "results": None,
-                "current_step": None,
-                "pending_tasks": None,
+                "error_info": None,
+                "root_cause_analysis": None,
+                "final_response": None,
+                "route": None,
+                "next_agent": None,
+                "knowledge_summary": None,
             }
 
             # Execute the graph
@@ -138,10 +143,10 @@ def run_chat(debug_mode: bool = False, history_mode: bool = False):
                     # Show all intermediate messages without prefix
                     for i, msg in enumerate(new_ai_messages[:-1]):
                         print(msg.content)
-                    
+
                     # Add blank line before final result
                     print()
-                    
+
                     # Show final message with prefix (only if it doesn't already have the prefix)
                     if len(new_ai_messages) > 0:
                         final_msg = new_ai_messages[-1].content
@@ -152,9 +157,6 @@ def run_chat(debug_mode: bool = False, history_mode: bool = False):
 
                     # Update counter
                     ai_messages_shown = len(ai_messages)
-
-                # Don't show route for any operation
-                # (route display logic was removed)
 
                 # Show debug or history if activated
                 if debug_mode:

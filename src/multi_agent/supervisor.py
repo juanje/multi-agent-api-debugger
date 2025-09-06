@@ -1,86 +1,131 @@
 """
-Intelligent supervisor that decides the flow of operations.
+Supervisor agent for orchestrating the multi-agent workflow.
+
+This agent is responsible for:
+- Analyzing user requests
+- Determining the next agent to invoke
+- Managing the overall workflow
+- Coordinating between specialized agents
 """
 
-from langgraph.types import Command
+from __future__ import annotations
+from typing import Dict, Any
 from langchain_core.messages import AIMessage
-
-from .state import ChatState
-from .tools import (
-    ROUTE_TOOLS_RE,
-    ROUTE_RAG_RE,
-    detect_parallel_operations,
-    detect_sequential_operations,
+from multi_agent.state import GraphState
+from multi_agent.mocks.planning import create_comprehensive_todo_list, get_next_task
+from multi_agent.mocks.intelligence import (
+    analyze_user_intent,
 )
 
 
-def supervisor_node(state: ChatState):
-    """Intelligent supervisor that detects parallel and sequential patterns."""
+class Supervisor:
+    """Supervisor agent for orchestrating the multi-agent workflow."""
+
+    def __init__(self):
+        """Initialize the Supervisor."""
+        pass
+
+    def analyze_request(self, state: GraphState) -> Dict[str, Any]:
+        """Analyze the user request and determine next steps."""
+        if not state.get("messages"):
+            return {"route": "done", "next_agent": None, "todo_list": []}
+
+        last_message = state["messages"][-1]
+        content = last_message.content
+        if isinstance(content, list):
+            text = ""
+            for item in content:
+                if isinstance(item, str):
+                    text = item
+                    break
+        else:
+            text = content or ""
+
+        # Analyze user intent
+        intent = analyze_user_intent(text)
+
+        # Check if we already have a final response
+        if state.get("final_response"):
+            route = "done"
+            next_agent = None
+            instruction = None
+            todo_list = []
+        else:
+            # Create comprehensive todo list for all workflows
+            todo_list = create_comprehensive_todo_list(state)
+
+            # Determine route based on next task
+            next_task = get_next_task(todo_list)
+            if next_task:
+                route = next_task["agent"]
+                next_agent = route
+                instruction = f"Execute: {next_task['description']}"
+            else:
+                # No pending tasks, check if we need to synthesize response
+                if (
+                    state.get("results")
+                    or state.get("root_cause_analysis")
+                    or state.get("knowledge_summary")
+                ):
+                    route = "response_synthesizer"
+                    next_agent = "response_synthesizer"
+                    instruction = "Synthesize final response"
+                else:
+                    route = "done"
+                    next_agent = None
+                    instruction = None
+
+        return {
+            "route": route,
+            "next_agent": next_agent,
+            "todo_list": todo_list,
+            "intent": intent,
+            "instruction": instruction,
+        }
+
+
+def supervisor_node(state: GraphState) -> GraphState:
+    """Supervisor node that analyzes requests and determines next steps."""
     if not state["messages"]:
         return state
 
-    # Check if we're in the middle of a sequential operation
-    if state.get("route") == "sequential":
-        steps = state.get("steps") or []
-        current_step = state.get("current_step") or 0
+    supervisor = Supervisor()
+    analysis = supervisor.analyze_request(state)
 
-        if current_step < len(steps):
-            # There are more steps, continue with the next one
-            return Command(goto="sequential_executor")
+    new_state = state.copy()
+    msgs = list(new_state["messages"])
+
+    # Store the initial user request as goal if not already set
+    if not new_state.get("goal") and state["messages"]:
+        last_message = state["messages"][-1]
+        content = last_message.content
+        if isinstance(content, list):
+            text = ""
+            for item in content:
+                if isinstance(item, str):
+                    text = item
+                    break
         else:
-            # No more steps, show final result and terminate
-            results = state.get("results") or []
-            final_result = results[-1] if results else "No operations completed"
+            text = content or ""
+        new_state["goal"] = text
 
-            new_state = state.copy()
-            msgs = list(new_state["messages"])
-            msgs.append(AIMessage(content=f"🤖 Assistant: {final_result}"))
-            new_state["messages"] = msgs
-            new_state["route"] = "done"
+    # Update state with analysis results
+    new_state["route"] = analysis["route"]
+    new_state["next_agent"] = analysis["next_agent"]
 
-            return Command(goto="finish", update=new_state)
+    if analysis["todo_list"]:
+        new_state["todo_list"] = analysis["todo_list"]
 
-    last_user = state["messages"][-1]
-    content = last_user.content
-    if isinstance(content, list):
-        # If it's a list, take the first string element
-        text = ""
-        for item in content:
-            if isinstance(item, str):
-                text = item
-                break
+    # Add supervisor message
+    if analysis["route"] == "done":
+        msgs.append(AIMessage(content="✅ Supervisor: Workflow completed"))
+        new_state["route"] = "done"
     else:
-        text = content or ""
-    text = text.lower()
-
-    # Detect sequential operations FIRST (more specific)
-    sequential_steps = detect_sequential_operations(text)
-    if sequential_steps:
-        return Command(
-            goto="sequential_executor",
-            update={
-                "route": "sequential",
-                "steps": sequential_steps,
-                "current_step": 0,
-                "results": [],
-            },
+        next_agent = analysis["next_agent"]
+        instruction = analysis.get("instruction", "Process request")
+        msgs.append(
+            AIMessage(content=f"🎯 Supervisor: Routing to {next_agent} - {instruction}")
         )
 
-    # Detect parallel operations
-    parallel_ops = detect_parallel_operations(text)
-    if parallel_ops:
-        return Command(
-            goto="parallel_executor",
-            update={"route": "parallel", "operations": parallel_ops, "results": []},
-        )
-
-    # Original logic for simple operations
-    if ROUTE_TOOLS_RE.search(text) or ("time" in text):
-        route = "tools"
-    elif ROUTE_RAG_RE.search(text):
-        route = "rag"
-    else:
-        route = "rag" if "?" in text else "tools"
-
-    target = "agent_tools" if route == "tools" else "agent_rag"
-    return Command(goto=target, update={"route": route})
+    new_state["messages"] = msgs
+    return new_state

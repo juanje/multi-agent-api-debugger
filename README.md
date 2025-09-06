@@ -1,23 +1,25 @@
-# Multi-Agent System with LangGraph
+# Multi-Agent API Debugger
 
-An intelligent chatbot that can execute simple, parallel, and sequential operations
+An intelligent multi-agent system for API job management and automated debugging
 using [LangGraph](https://langchain-ai.github.io/langgraph/).
 
-> **NOTE:** This project doesn't make any LLM calls, it uses mocked tools and RAG,
-> just to learn how to build a multi-agent chatbot using LangGraph.
+> **NOTE:** This project uses mocked APIs and knowledge bases for demonstration purposes,
+> focusing on the architecture and agent orchestration patterns. This is a terminal-based
+> version optimized for command-line usage without markdown formatting.
 
 ## Features
 
-- **Simple Operations**: Calculator, time query, RAG search
-- **Parallel Operations**: Simultaneous execution of multiple tasks
-- **Sequential Operations**: Step-by-step execution with intermediate decisions
-- **Persistent History**: Maintains context between conversations
-- **Interactive Interface**: CLI chat with debug and history options
+- **🔧 API Operations**: Run jobs, get results, check system status
+- **🐞 Error Debugging**: Automated root cause analysis and troubleshooting
+- **📚 Knowledge Base**: Answer questions about the system and API
+- **📝 Response Synthesis**: Format and present results clearly
+- **🔄 Agent Orchestration**: Intelligent routing between specialized agents
+- **💾 State Management**: Persistent conversation context
 
 ## Installation
 
 ```bash
-cd multi-agent
+cd multi-agent-api-debugger
 uv sync
 ```
 
@@ -25,22 +27,28 @@ uv sync
 
 ### Interactive Chat
 ```bash
-uv run multi-agent
+uv run multi-agent chat
 ```
 
-### Available Options
+### Available Commands
 ```bash
-# Normal chat
-uv run multi-agent
+# Interactive chat
+uv run multi-agent chat
 
-# Chat with debug (shows complete state)
-uv run multi-agent --debug
+# Chat with debug mode
+uv run multi-agent chat --debug
 
-# Chat with history (shows conversation history)
-uv run multi-agent --historial
+# Chat with history mode
+uv run multi-agent chat --history
+
+# Run demo
+uv run multi-agent demo
 
 # Run tests
-uv run multi-agent --test
+uv run multi-agent test
+
+# Show system info
+uv run multi-agent info
 
 # Show help
 uv run multi-agent --help
@@ -48,73 +56,78 @@ uv run multi-agent --help
 
 ## Usage Examples
 
-### Simple Operations
-- `What is 15*8?` → Calculator
-- `What time is it?` → Time query
-- `Summarize the manual` → RAG search
+### API Operations
+- `list all jobs` → Show available jobs
+- `run job data_processing` → Execute a specific job
+- `get job results job_001` → Get results for a job
+- `check system status` → Monitor system health
 
-### Parallel Operations
-- `What is 2+3 and 8/2?` → Executes both calculations simultaneously
-- `Tell me the time and search the manual` → Time query and RAG in parallel
+### Error Debugging
+- `debug job_003` → Analyze why job_003 failed
+- `investigate the error` → Debug the last error
+- `what went wrong with the last job?` → Root cause analysis
 
-### Sequential Operations
-- `Sum of 3x8 and 129/3` → Calculates 3x8, then 129/3, then sums the results
-- `Search for information about tasks for this time` → Time query, then searches for tasks
+### Knowledge Queries
+- `what is the API?` → Learn about the API
+- `how do I authenticate?` → Get authentication help
+- `explain job templates` → Learn about templates
+- `what are common errors?` → Get error information
 
 ## Architecture
 
-The system is organized into modules:
+The system follows a multi-agent architecture with specialized agents:
 
-- `state.py` - Shared system state
-- `tools.py` - Tools and utilities
-- `supervisor.py` - Intelligent supervisor
-- `agent_tools.py` - Tools agent
-- `agent_rag.py` - RAG agent
-- `executors.py` - Parallel and sequential executors
-- `graph.py` - LangGraph construction
-- `chat.py` - Interactive chat interface
-- `cli.py` - Main CLI
+### Core Agents
+- **Supervisor** (`supervisor.py`) - Intelligent routing and orchestration
+- **API Operator** (`api_operator.py`) - Handles all API operations
+- **Debugger** (`debugger.py`) - Performs root cause analysis
+- **Knowledge Assistant** (`knowledge_assistant.py`) - Answers questions using RAG
+- **Response Synthesizer** (`response_synthesizer.py`) - Formats final responses
+
+### Supporting Modules
+- **Graph State** (`state.py`) - Shared state management
+- **Graph Construction** (`graph.py`) - LangGraph workflow definition
+- **Chat Interface** (`chat.py`) - Interactive user interface
+- **CLI** (`cli.py`) - Command-line interface with Click
+- **Demo** (`demo.py`) - System demonstration
 
 ### System Flow Diagram
 
 ```mermaid
 graph TD
     A[User Input] --> B[Supervisor]
-    B --> C{Operation Type?}
+    B --> C{Request Type?}
     
-    C -->|Simple Tools| D[Agent Tools]
-    C -->|RAG Query| E[Agent RAG]
-    C -->|Parallel| F[Parallel Executor]
-    C -->|Sequential| G[Sequential Executor]
+    C -->|API Operations| D[API Operator]
+    C -->|Debugging| E[Debugger]
+    C -->|Knowledge Query| F[Knowledge Assistant]
     
-    D --> H[Finish]
-    E --> H
-    F --> H
-    G --> B
+    D --> G[Response Synthesizer]
+    E --> G
+    F --> G
     
-    B -->|Sequential Complete| H
-    H --> I[Response to User]
+    G --> H[Final Response]
     
-    subgraph "Tools Agent"
-        D --> D1[Calculator]
-        D --> D2[Time Query]
+    subgraph "API Operator"
+        D --> D1[Run Jobs]
+        D --> D2[Get Results]
+        D --> D3[Check Status]
     end
     
-    subgraph "RAG Agent"
-        E --> E1[Document Search]
-        E --> E2[Answer Generation]
+    subgraph "Debugger"
+        E --> E1[Error Analysis]
+        E --> E2[Root Cause Analysis]
+        E --> E3[Solution Recommendations]
     end
     
-    subgraph "Parallel Executor"
-        F --> F1[Execute All Operations]
-        F --> F2[Combine Results]
+    subgraph "Knowledge Assistant"
+        F --> F1[Knowledge Search]
+        F --> F2[Answer Generation]
     end
     
-    subgraph "Sequential Executor"
-        G --> G1[Execute Step 1]
-        G1 --> G2[Execute Step 2]
-        G2 --> G3[Execute Step N]
-        G3 --> G4[Sum/Combine Results]
+    subgraph "Response Synthesizer"
+        G --> G1[Format Results]
+        G --> G2[Create Summary]
     end
 ```
 
@@ -125,7 +138,10 @@ graph TD
 uv sync --extra dev
 
 # Run tests
-uv run multi-agent --test
+uv run multi-agent test
+
+# Run tests with coverage
+uv run pytest --cov=src --cov-report=term-missing
 
 # Linting
 uv run ruff check src/
@@ -134,3 +150,77 @@ uv run ruff format src/
 # Type checking
 uv run mypy src/
 ```
+
+### Test Coverage
+
+The project maintains high test coverage across all critical components:
+
+- **Total Coverage**: 74%
+- **Critical Components**: 90%+ coverage
+- **Test Count**: 166 tests
+- **Architecture Coverage**: Complete end-to-end testing
+
+Key areas with excellent coverage:
+- Multi-agent orchestration (97% coverage)
+- Routing and planning (92% coverage)
+- Intelligence functions (88% coverage)
+- API operations (93% coverage)
+- State management (100% coverage)
+
+## Key Features
+
+### Mocked Components
+- **API Responses**: Simulated job operations and results
+- **Knowledge Base**: Dictionary-based Q&A system
+- **Error Patterns**: Predefined error scenarios for debugging
+- **Root Cause Analysis**: Rule-based analysis engine
+
+### Terminal-Optimized Design
+- **Plain Text Output**: No markdown formatting for better terminal readability
+- **Clear Structure**: Uses emojis and simple formatting for visual hierarchy
+- **Interactive Demo**: Command-line demo with exit options (q to quit, s to skip)
+- **Debug Modes**: Built-in debugging and history viewing capabilities
+
+### Agent Specialization
+Each agent has a specific role and set of capabilities:
+- **Supervisor**: Routes requests and manages workflow
+- **API Operator**: Handles all external API interactions
+- **Debugger**: Analyzes errors and provides solutions
+- **Knowledge Assistant**: Answers questions from knowledge base
+- **Response Synthesizer**: Formats and presents results
+
+## 🤖 AI Tools Disclaimer
+
+<details>
+<summary>This project was developed with the assistance of artificial intelligence tools</summary>
+
+**Tools used:**
+- **Cursor**: Code editor with AI capabilities
+- **Claude-4-Sonnet**: Anthropic's language model
+
+**Division of responsibilities:**
+
+**AI (Cursor + Claude-4-Sonnet)**:
+- 🔧 Initial code prototyping
+- 📝 Generation of examples and test cases
+- 🐛 Assistance in debugging and error resolution
+- 📚 Documentation and comments writing
+- 💡 Technical implementation suggestions
+
+**Human (Juanje Ojeda)**:
+- 🎯 Specification of objectives and requirements
+- 🔍 Critical review of code and documentation
+- 💬 Iterative feedback and solution refinement
+- ✅ Final validation of concepts and approaches
+
+**Collaboration philosophy**: AI tools served as a highly capable technical assistant, while all design decisions, educational objectives, and project directions were defined and validated by the human.
+</details>
+
+## 📄 License
+
+MIT License - see LICENSE file for details.
+
+## 👥 Author
+
+- **Author:** Juanje Ojeda
+- **Email:** juanje@redhat.com

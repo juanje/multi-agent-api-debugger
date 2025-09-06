@@ -1,136 +1,181 @@
 """
-Unit tests for supervisor.py
+Unit tests for the Supervisor agent.
 """
 
 from langchain_core.messages import HumanMessage
-from multi_agent.supervisor import supervisor_node
+from multi_agent.supervisor import Supervisor, supervisor_node
+from multi_agent.state import GraphState
+
+
+class TestSupervisor:
+    """Test cases for the Supervisor class."""
+
+    def test_init(self):
+        """Test supervisor initialization."""
+        supervisor = Supervisor()
+        assert supervisor is not None
+
+    def test_analyze_request_empty_messages(self):
+        """Test analyze_request with empty messages."""
+        supervisor = Supervisor()
+        state = GraphState(messages=[])
+        result = supervisor.analyze_request(state)
+
+        assert result["route"] == "done"
+        assert result["next_agent"] is None
+        assert result["todo_list"] == []
+
+    def test_analyze_request_with_message(self):
+        """Test analyze_request with a message."""
+        supervisor = Supervisor()
+        state = GraphState(messages=[HumanMessage(content="list all jobs")])
+        result = supervisor.analyze_request(state)
+
+        assert "route" in result
+        assert "next_agent" in result
+        assert "todo_list" in result
+        assert "intent" in result
+        assert "instruction" in result
+
+    def test_analyze_request_list_jobs(self):
+        """Test analyze_request for list jobs command."""
+        supervisor = Supervisor()
+        state = GraphState(messages=[HumanMessage(content="list all jobs")])
+        result = supervisor.analyze_request(state)
+
+        assert result["route"] == "api_operator"
+        assert result["next_agent"] == "api_operator"
+        assert len(result["todo_list"]) > 0
+        assert result["todo_list"][0]["agent"] == "api_operator"
+
+    def test_analyze_request_knowledge_query(self):
+        """Test analyze_request for knowledge query."""
+        supervisor = Supervisor()
+        state = GraphState(messages=[HumanMessage(content="what are jobs?")])
+        result = supervisor.analyze_request(state)
+
+        assert result["route"] == "knowledge_assistant"
+        assert result["next_agent"] == "knowledge_assistant"
+        assert len(result["todo_list"]) > 0
+        assert result["todo_list"][0]["agent"] == "knowledge_assistant"
+
+    def test_analyze_request_debug_command(self):
+        """Test analyze_request for debug command."""
+        supervisor = Supervisor()
+        state = GraphState(messages=[HumanMessage(content="debug job_003")])
+        result = supervisor.analyze_request(state)
+
+        assert result["route"] == "debugger"
+        assert result["next_agent"] == "debugger"
+        assert len(result["todo_list"]) > 0
+        assert result["todo_list"][0]["agent"] == "debugger"
+
+    def test_analyze_request_with_list_content(self):
+        """Test analyze_request with list content in message."""
+        supervisor = Supervisor()
+        # Create a message with list content (simulating complex message format)
+        message = HumanMessage(content=["list", "all", "jobs"])
+        state = GraphState(messages=[message])
+        result = supervisor.analyze_request(state)
+
+        assert "route" in result
+        assert "next_agent" in result
+
+    def test_analyze_request_with_none_content(self):
+        """Test analyze_request with None content."""
+        supervisor = Supervisor()
+        # Use empty string instead of None since HumanMessage doesn't accept None
+        message = HumanMessage(content="")
+        state = GraphState(messages=[message])
+        result = supervisor.analyze_request(state)
+
+        assert "route" in result
+        assert "next_agent" in result
 
 
 class TestSupervisorNode:
-    """Tests for the supervisor_node function."""
+    """Test cases for the supervisor_node function."""
 
     def test_empty_messages(self):
-        """Test with empty messages."""
-        state = {"messages": []}
+        """Test supervisor_node with empty messages."""
+        state = GraphState(messages=[])
         result = supervisor_node(state)
         assert result == state
 
-    def test_sequential_route_continuation(self):
-        """Test sequential route continuation."""
-        state = {
-            "messages": [{"content": "test"}],
-            "route": "sequential",
-            "steps": [{"type": "calc", "operation": "2+3", "step": 1}],
-            "current_step": 0,
-            "results": [],
-        }
+    def test_with_message(self):
+        """Test supervisor_node with a message."""
+        state = GraphState(messages=[HumanMessage(content="list all jobs")])
         result = supervisor_node(state)
-        assert result.goto == "sequential_executor"
 
-    def test_sequential_route_completion(self):
-        """Test sequential route completion."""
-        state = {
-            "messages": [{"content": "test"}],
-            "route": "sequential",
-            "steps": [{"type": "calc", "operation": "2+3", "step": 1}],
-            "current_step": 1,  # Greater than len(steps)
-            "results": ["Result 1", "Final result"],
-        }
-        result = supervisor_node(state)
-        assert result.goto == "finish"
-        assert "Final result" in result.update["messages"][-1].content
+        assert "messages" in result
+        assert len(result["messages"]) > len(state["messages"])
+        assert "route" in result
+        assert "next_agent" in result
+        assert "todo_list" in result
 
-    def test_sequential_operations_detection(self):
-        """Test sequential operations detection."""
-        state = {
-            "messages": [HumanMessage(content="sum of 3x8 and 129/3")],
-        }
+    def test_goal_setting(self):
+        """Test that goal is set from user message."""
+        state = GraphState(messages=[HumanMessage(content="test message")])
         result = supervisor_node(state)
-        assert result.goto == "sequential_executor"
-        assert result.update["route"] == "sequential"
-        assert result.update["current_step"] == 0
-        assert result.update["results"] == []
 
-    def test_parallel_operations_detection(self):
-        """Test parallel operations detection."""
-        state = {
-            "messages": [HumanMessage(content="What is 2+3 and 8/2?")],
-        }
-        result = supervisor_node(state)
-        assert result.goto == "parallel_executor"
-        assert result.update["route"] == "parallel"
-        assert "2+3" in result.update["operations"]
-        assert "8/2" in result.update["operations"]
+        assert result.get("goal") == "test message"
 
-    def test_tools_route_calculation(self):
-        """Test routing to tools for calculations."""
-        state = {
-            "messages": [HumanMessage(content="What is 12*7?")],
-        }
+    def test_goal_not_overwritten(self):
+        """Test that existing goal is not overwritten."""
+        state = GraphState(
+            messages=[HumanMessage(content="new message")], goal="existing goal"
+        )
         result = supervisor_node(state)
-        assert result.goto == "agent_tools"
-        assert result.update["route"] == "tools"
 
-    def test_tools_route_time(self):
-        """Test routing to tools for time."""
-        state = {
-            "messages": [HumanMessage(content="What time is it?")],
-        }
-        result = supervisor_node(state)
-        assert result.goto == "agent_tools"
-        assert result.update["route"] == "tools"
+        assert result.get("goal") == "existing goal"
 
-    def test_rag_route_document(self):
-        """Test routing to RAG for documents."""
-        state = {
-            "messages": [HumanMessage(content="summarize the manual")],
-        }
+    def test_route_done_workflow_completed(self):
+        """Test supervisor message when workflow is completed."""
+        # Create a state that would result in route="done" by having final_response
+        state = GraphState(
+            messages=[HumanMessage(content="test")], final_response="Test response"
+        )
         result = supervisor_node(state)
-        assert result.goto == "agent_rag"
-        assert result.update["route"] == "rag"
 
-    def test_rag_route_question(self):
-        """Test routing to RAG for questions."""
-        state = {
-            "messages": [HumanMessage(content="Can you help me?")],
-        }
-        result = supervisor_node(state)
-        assert result.goto == "agent_rag"
-        assert result.update["route"] == "rag"
+        # Check that we have a completion message
+        messages = result["messages"]
+        completion_messages = [
+            msg for msg in messages if "Workflow completed" in str(msg.content)
+        ]
+        assert len(completion_messages) > 0
 
-    def test_tools_route_ambiguous(self):
-        """Test routing to tools for ambiguous input without '?'."""
-        state = {
-            "messages": [HumanMessage(content="hello")],
-        }
+    def test_routing_message_generated(self):
+        """Test that routing message is generated for non-done routes."""
+        state = GraphState(messages=[HumanMessage(content="list all jobs")])
         result = supervisor_node(state)
-        assert result.goto == "agent_tools"
-        assert result.update["route"] == "tools"
 
-    def test_rag_route_ambiguous_with_question(self):
-        """Test routing to RAG for ambiguous input with '?'."""
-        state = {
-            "messages": [HumanMessage(content="hello?")],
-        }
-        result = supervisor_node(state)
-        assert result.goto == "agent_rag"
-        assert result.update["route"] == "rag"
+        # Check that we have a routing message
+        messages = result["messages"]
+        routing_messages = [msg for msg in messages if "Routing to" in str(msg.content)]
+        assert len(routing_messages) > 0
 
-    def test_message_content_handling_list(self):
-        """Test handling message content as list."""
-        state = {
-            "messages": [HumanMessage(content=["text", "additional"])],
-        }
+    def test_todo_list_updated(self):
+        """Test that todo_list is updated in state."""
+        state = GraphState(messages=[HumanMessage(content="list all jobs")])
         result = supervisor_node(state)
-        # Should process the first element of the list
-        assert result.goto in ["agent_tools", "agent_rag"]
 
-    def test_message_content_handling_none(self):
-        """Test handling message content None."""
-        # Create a message with empty content instead of None
-        state = {
-            "messages": [HumanMessage(content="")],
-        }
-        result = supervisor_node(state)
-        # Should handle empty content correctly
-        assert result.goto in ["agent_tools", "agent_rag"]
+        assert "todo_list" in result
+        assert isinstance(result["todo_list"], list)
+        if result["todo_list"]:
+            assert "id" in result["todo_list"][0]
+            assert "description" in result["todo_list"][0]
+            assert "agent" in result["todo_list"][0]
+
+    def test_state_copy_preserved(self):
+        """Test that original state is preserved in copy."""
+        original_state = GraphState(
+            messages=[HumanMessage(content="test")],
+            goal="test goal",
+            results={"test": "data"},
+        )
+        result = supervisor_node(original_state)
+
+        # Check that original fields are preserved
+        assert result.get("goal") == "test goal"
+        assert result.get("results") == {"test": "data"}
+        assert len(result["messages"]) >= len(original_state["messages"])

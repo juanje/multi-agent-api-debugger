@@ -2,96 +2,137 @@
 Unit tests for state.py
 """
 
-from multi_agent.state import ChatState
+from multi_agent.state import GraphState
 
 
-class TestChatState:
-    """Tests for the ChatState class."""
+class TestGraphState:
+    """Tests for the GraphState class."""
 
-    def test_chat_state_creation(self):
-        """Test ChatState creation."""
-        state = ChatState(
+    def test_graph_state_creation(self):
+        """Test GraphState creation with new architecture fields."""
+        state = GraphState(
             messages=[],
-            route="tools",
-            operations=["calc"],
-            steps=[{"type": "calc", "operation": "2+3", "step": 1}],
-            results=["5"],
-            current_step=0,
-            pending_tasks=["task1"],
+            goal="test goal",
+            todo_list=["list_public_jobs"],
+            results={"list_public_jobs": {"jobs": []}},
+            error_info=None,
+            root_cause_analysis=None,
+            final_response=None,
+            route="api_operator",
+            next_agent="api_operator",
+            knowledge_summary=[],
         )
 
         assert state["messages"] == []
-        assert state["route"] == "tools"
-        assert state["operations"] == ["calc"]
-        assert state["steps"] == [{"type": "calc", "operation": "2+3", "step": 1}]
-        assert state["results"] == ["5"]
-        assert state["current_step"] == 0
-        assert state["pending_tasks"] == ["task1"]
+        assert state["goal"] == "test goal"
+        assert state["todo_list"] == ["list_public_jobs"]
+        assert state["results"] == {"list_public_jobs": {"jobs": []}}
+        assert state["error_info"] is None
+        assert state["root_cause_analysis"] is None
+        assert state["final_response"] is None
+        assert state["route"] == "api_operator"
+        assert state["next_agent"] == "api_operator"
+        assert state["knowledge_summary"] == []
 
-    def test_chat_state_optional_fields(self):
-        """Test ChatState with optional fields."""
-        state = ChatState(
+    def test_graph_state_optional_fields(self):
+        """Test GraphState with optional fields."""
+        state = GraphState(
             messages=[],
-            route=None,
-            operations=None,
-            steps=None,
+            goal=None,
+            todo_list=None,
             results=None,
-            current_step=None,
-            pending_tasks=None,
+            error_info=None,
+            root_cause_analysis=None,
+            final_response=None,
+            route=None,
+            next_agent=None,
+            knowledge_summary=None,
         )
 
         assert state["messages"] == []
-        assert state["route"] is None
-        assert state["operations"] is None
-        assert state["steps"] is None
+        assert state["goal"] is None
+        assert state["todo_list"] is None
         assert state["results"] is None
-        assert state["current_step"] is None
-        assert state["pending_tasks"] is None
+        assert state["error_info"] is None
+        assert state["root_cause_analysis"] is None
+        assert state["final_response"] is None
+        assert state["route"] is None
+        assert state["next_agent"] is None
+        assert state["knowledge_summary"] is None
 
-    def test_chat_state_inheritance(self):
-        """Test that ChatState is a TypedDict."""
+    def test_graph_state_inheritance(self):
+        """Test that GraphState is a TypedDict."""
+        assert hasattr(GraphState, "__annotations__")
+        assert "messages" in GraphState.__annotations__
+        assert "goal" in GraphState.__annotations__
+        assert "route" in GraphState.__annotations__
 
-        # Verify that ChatState is a TypedDict
-        assert hasattr(ChatState, "__annotations__")
-        assert "messages" in ChatState.__annotations__
-        assert "route" in ChatState.__annotations__
-
-    def test_chat_state_route_values(self):
+    def test_graph_state_route_values(self):
         """Test valid values for route."""
-        valid_routes = ["tools", "rag", "parallel", "sequential", "done"]
+        valid_routes = [
+            "api_operator",
+            "debugger",
+            "knowledge_assistant",
+            "response_synthesizer",
+            "done",
+        ]
 
         for route in valid_routes:
-            state = ChatState(messages=[], route=route)
+            state = GraphState(messages=[], route=route)
             assert state["route"] == route
 
-    def test_chat_state_operations_list(self):
-        """Test operations as list."""
-        operations = ["calc", "time", "rag"]
-        state = ChatState(messages=[], operations=operations)
-        assert state["operations"] == operations
-
-    def test_chat_state_steps_list(self):
-        """Test steps as list of dictionaries."""
-        steps = [
-            {"type": "calc", "operation": "2+3", "step": 1},
-            {"type": "time", "step": 2},
-        ]
-        state = ChatState(messages=[], steps=steps)
-        assert state["steps"] == steps
-
-    def test_chat_state_results_list(self):
-        """Test results as list of strings."""
-        results = ["Result 1", "Result 2"]
-        state = ChatState(messages=[], results=results)
+    def test_graph_state_results_dict(self):
+        """Test results as dictionary."""
+        results = {"list_public_jobs": {"jobs": []}, "run_job": {"job_id": "job_001"}}
+        state = GraphState(messages=[], results=results)
         assert state["results"] == results
 
-    def test_chat_state_current_step_int(self):
-        """Test current_step as integer."""
-        state = ChatState(messages=[], current_step=5)
-        assert state["current_step"] == 5
+    def test_graph_state_error_info(self):
+        """Test error_info field."""
+        error_info = {
+            "error_code": "TEMPLATE_NOT_FOUND",
+            "error_message": "Template not found",
+        }
+        state = GraphState(messages=[], error_info=error_info)
+        assert state["error_info"] == error_info
 
-    def test_chat_state_pending_tasks_list(self):
-        """Test pending_tasks as list."""
-        tasks = ["task1", "task2", "task3"]
-        state = ChatState(messages=[], pending_tasks=tasks)
-        assert state["pending_tasks"] == tasks
+    def test_graph_state_root_cause_analysis(self):
+        """Test root_cause_analysis field."""
+        analysis = {"error_code": "TEMPLATE_NOT_FOUND", "confidence_level": "High"}
+        state = GraphState(messages=[], root_cause_analysis=analysis)
+        assert state["root_cause_analysis"] == analysis
+
+    def test_graph_state_todo_list(self):
+        """Test todo_list field."""
+        todo_list = ["list_public_jobs", "run_job:job_name=data_processing"]
+        state = GraphState(messages=[], todo_list=todo_list)
+        assert state["todo_list"] == todo_list
+
+    def test_graph_state_knowledge_summary(self):
+        """Test knowledge_summary field."""
+        knowledge_summary = [
+            {"topic": "API", "summary": "REST API for job management"},
+            {"topic": "Jobs", "summary": "Background processing system"},
+        ]
+        state = GraphState(messages=[], knowledge_summary=knowledge_summary)
+        assert state["knowledge_summary"] == knowledge_summary
+
+    def test_graph_state_goal_field(self):
+        """Test goal field."""
+        goal = "Debug job_003 failure and provide solution"
+        state = GraphState(messages=[], goal=goal)
+        assert state["goal"] == goal
+
+    def test_graph_state_next_agent_field(self):
+        """Test next_agent field."""
+        next_agent = "debugger"
+        state = GraphState(messages=[], next_agent=next_agent)
+        assert state["next_agent"] == next_agent
+
+    def test_graph_state_final_response_field(self):
+        """Test final_response field."""
+        final_response = (
+            "✅ Debugging Analysis Complete\n\nRoot Cause: Template missing"
+        )
+        state = GraphState(messages=[], final_response=final_response)
+        assert state["final_response"] == final_response
