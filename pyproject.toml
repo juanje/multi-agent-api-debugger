@@ -1,0 +1,36 @@
+[project]
+name = "multi-agent"
+version = "0.1.0"
+description = "Sistema multi-agente con LangGraph para operaciones paralelas y secuenciales"
+readme = "README.md"
+authors = [
+    { name = "Juanje Ojeda", email = "juanje@redhat.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.3,<0.4",
+    "langchain-core>=0.3,<0.4",
+]
+
+[project.scripts]
+multi-agent = "multi_agent.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["uv_build>=0.8.8,<0.9.0"]
+build-backend = "uv_build"
