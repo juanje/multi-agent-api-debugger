@@ -2,8 +2,20 @@
 Unit tests for Debugger.
 """
 
+import os
+import pytest
 from langchain_core.messages import HumanMessage
-from multi_agent.debugger import debugger_node, Debugger
+from multi_agent.agents.debugger import debugger_node, Debugger
+
+
+@pytest.fixture(autouse=True)
+def enable_mocking():
+    """Enable LLM mocking for all tests in this module."""
+    os.environ["USE_LLM_MOCKS"] = "true"
+    yield
+    # Clean up after test
+    if "USE_LLM_MOCKS" in os.environ:
+        del os.environ["USE_LLM_MOCKS"]
 
 
 class TestDebugger:
@@ -60,21 +72,23 @@ class TestDebugger:
 class TestDebuggerNode:
     """Tests for debugger_node function."""
 
-    def test_empty_messages(self):
+    async def test_empty_messages(self):
         """Test with empty messages."""
         state = {"messages": []}
-        result = debugger_node(state)
-        assert result == state
+        result = await debugger_node(state)
+        # With our fixes, empty messages should set route to response_synthesizer
+        assert result["route"] == "response_synthesizer"
 
-    def test_no_error_info(self):
+    async def test_no_error_info(self):
         """Test with no error info."""
         state = {"messages": [HumanMessage(content="test")]}
-        result = debugger_node(state)
-        assert result == state
+        result = await debugger_node(state)
+        # With our fixes, no todo list should set route to response_synthesizer
+        assert result["route"] == "response_synthesizer"
 
-    def test_debug_job_003(self):
+    async def test_debug_job_003(self):
         """Test debugging job_003."""
-        from multi_agent.mocks.planning import create_task
+        from multi_agent.utils.mocks.planning import create_task
 
         state = {
             "messages": [HumanMessage(content="debug job_003")],
@@ -89,15 +103,15 @@ class TestDebuggerNode:
                 )
             ],
         }
-        result = debugger_node(state)
+        result = await debugger_node(state)
 
         assert "error_info" in result
         assert "root_cause_analysis" in result
         assert result["error_info"]["error_code"] == "TEMPLATE_NOT_FOUND"
 
-    def test_with_existing_error_info(self):
+    async def test_with_existing_error_info(self):
         """Test with existing error info."""
-        from multi_agent.mocks.planning import create_task
+        from multi_agent.utils.mocks.planning import create_task
 
         state = {
             "messages": [HumanMessage(content="test")],
@@ -114,7 +128,7 @@ class TestDebuggerNode:
                 )
             ],
         }
-        result = debugger_node(state)
+        result = await debugger_node(state)
 
         assert "root_cause_analysis" in result
         assert result["root_cause_analysis"]["error_code"] == "TIMEOUT_ERROR"

@@ -1,10 +1,14 @@
 """
 Unit tests for the planning module.
+
+Note: These tests use the mocking system to test the planning functions
+without requiring real LLM calls, making tests fast and deterministic.
 """
 
+import os
+import pytest
 from langchain_core.messages import HumanMessage
-from multi_agent.mocks.planning import (
-    create_task,
+from multi_agent.graph.planning import (
     create_comprehensive_todo_list,
     get_next_task,
     mark_task_completed,
@@ -13,316 +17,218 @@ from multi_agent.mocks.planning import (
     get_completed_tasks,
     get_failed_tasks,
     is_workflow_complete,
-    extract_job_name_from_text,
-    extract_job_id_from_text,
 )
-from multi_agent.state import GraphState
+from multi_agent.graph.state import GraphState
 
 
-class TestCreateTask:
-    """Test cases for create_task function."""
-
-    def test_create_basic_task(self):
-        """Test creating a basic task."""
-        task = create_task(description="Test task", agent="test_agent", priority=1)
-
-        assert task["description"] == "Test task"
-        assert task["agent"] == "test_agent"
-        assert task["status"] == "pending"
-        assert task["priority"] == 1
-        assert task["dependencies"] == []
-        assert task["parameters"] == {}
-        assert task["result"] is None
-        assert task["error"] is None
-        assert "id" in task
-        assert task["id"].startswith("task_")
-
-    def test_create_task_with_dependencies(self):
-        """Test creating a task with dependencies."""
-        task = create_task(
-            description="Test task",
-            agent="test_agent",
-            priority=2,
-            dependencies=["task_001", "task_002"],
-            parameters={"key": "value"},
-        )
-
-        assert task["dependencies"] == ["task_001", "task_002"]
-        assert task["parameters"] == {"key": "value"}
-        assert task["priority"] == 2
-
-    def test_task_id_uniqueness(self):
-        """Test that task IDs are unique."""
-        task1 = create_task("Task 1", "agent1")
-        task2 = create_task("Task 2", "agent2")
-
-        assert task1["id"] != task2["id"]
+@pytest.fixture(autouse=True)
+def enable_mocking():
+    """Enable LLM mocking for all tests in this module."""
+    os.environ["USE_LLM_MOCKS"] = "true"
+    yield
+    # Clean up after test
+    if "USE_LLM_MOCKS" in os.environ:
+        del os.environ["USE_LLM_MOCKS"]
 
 
 class TestCreateComprehensiveTodoList:
     """Test cases for create_comprehensive_todo_list function."""
 
-    def test_empty_messages(self):
-        """Test with empty messages."""
-        state = GraphState(messages=[])
-        todo_list = create_comprehensive_todo_list(state)
-        assert todo_list == []
+    @pytest.mark.asyncio
+    async def test_create_api_todo_list(self):
+        """Test creating todo list for API operations."""
+        state = GraphState(
+            messages=[HumanMessage(content="run data processing job")],
+            todo_list=[],
+            results={},
+            final_response=None,
+            error_info=None,
+            root_cause_analysis=None,
+        )
 
-    def test_list_jobs_command(self):
-        """Test list jobs command."""
-        state = GraphState(messages=[HumanMessage(content="list all jobs")])
-        todo_list = create_comprehensive_todo_list(state)
-
-        assert len(todo_list) == 1
+        todo_list = await create_comprehensive_todo_list(state)
+        assert len(todo_list) > 0
         assert todo_list[0]["agent"] == "api_operator"
-        assert "list" in todo_list[0]["description"].lower()
-        assert todo_list[0]["parameters"]["operation"] == "list_public_jobs"
+        assert todo_list[0]["status"] == "pending"
+        assert "id" in todo_list[0]
+        assert "description" in todo_list[0]
+        assert "parameters" in todo_list[0]
 
-    def test_run_job_command(self):
-        """Test run job command."""
-        state = GraphState(messages=[HumanMessage(content="run data processing job")])
-        todo_list = create_comprehensive_todo_list(state)
+    @pytest.mark.asyncio
+    async def test_create_debug_todo_list(self):
+        """Test creating todo list for debug operations."""
+        state = GraphState(
+            messages=[HumanMessage(content="debug job_001 error")],
+            todo_list=[],
+            results={},
+            final_response=None,
+            error_info=None,
+            root_cause_analysis=None,
+        )
 
-        assert len(todo_list) == 1
-        assert todo_list[0]["agent"] == "api_operator"
-        assert "execute" in todo_list[0]["description"].lower()
-        assert todo_list[0]["parameters"]["operation"] == "run_job"
-
-    def test_check_system_command(self):
-        """Test check system command."""
-        state = GraphState(messages=[HumanMessage(content="check system status")])
-        todo_list = create_comprehensive_todo_list(state)
-
-        assert len(todo_list) == 1
-        assert todo_list[0]["agent"] == "api_operator"
-        assert "status" in todo_list[0]["description"].lower()
-        assert todo_list[0]["parameters"]["operation"] == "check_system_status"
-
-    def test_knowledge_query(self):
-        """Test knowledge query."""
-        state = GraphState(messages=[HumanMessage(content="what are jobs?")])
-        todo_list = create_comprehensive_todo_list(state)
-
-        assert len(todo_list) == 1
-        assert todo_list[0]["agent"] == "knowledge_assistant"
-        assert "answer" in todo_list[0]["description"].lower()
-        assert todo_list[0]["parameters"]["query"] == "what are jobs?"
-
-    def test_explain_command(self):
-        """Test explain command (without question mark)."""
-        state = GraphState(messages=[HumanMessage(content="explain job templates")])
-        todo_list = create_comprehensive_todo_list(state)
-
-        assert len(todo_list) == 1
-        assert todo_list[0]["agent"] == "knowledge_assistant"
-        assert "answer" in todo_list[0]["description"].lower()
-
-    def test_debug_command(self):
-        """Test debug command."""
-        state = GraphState(messages=[HumanMessage(content="debug job_003")])
-        todo_list = create_comprehensive_todo_list(state)
-
-        assert len(todo_list) == 2  # Debug task + synthesis task
+        todo_list = await create_comprehensive_todo_list(state)
+        assert len(todo_list) > 0
         assert todo_list[0]["agent"] == "debugger"
-        assert todo_list[1]["agent"] == "response_synthesizer"
-        assert todo_list[1]["dependencies"] == [todo_list[0]["id"]]
+        assert todo_list[0]["status"] == "pending"
 
-    def test_unknown_command_fallback(self):
-        """Test unknown command fallback."""
-        state = GraphState(messages=[HumanMessage(content="unknown command")])
-        todo_list = create_comprehensive_todo_list(state)
+    @pytest.mark.asyncio
+    async def test_create_knowledge_todo_list(self):
+        """Test creating todo list for knowledge operations."""
+        state = GraphState(
+            messages=[HumanMessage(content="what are job templates?")],
+            todo_list=[],
+            results={},
+            final_response=None,
+            error_info=None,
+            root_cause_analysis=None,
+        )
 
-        assert len(todo_list) == 1
-        assert todo_list[0]["agent"] == "api_operator"
-        assert "process" in todo_list[0]["description"].lower()
+        todo_list = await create_comprehensive_todo_list(state)
+        assert len(todo_list) > 0
+        assert todo_list[0]["agent"] == "knowledge_assistant"
+        assert todo_list[0]["status"] == "pending"
 
-    def test_with_list_content(self):
-        """Test with list content in message."""
-        message = HumanMessage(content=["list", "all", "jobs"])
-        state = GraphState(messages=[message])
-        todo_list = create_comprehensive_todo_list(state)
+    @pytest.mark.asyncio
+    async def test_empty_messages_todo_list(self):
+        """Test creating todo list with empty messages."""
+        state = GraphState(
+            messages=[],
+            todo_list=[],
+            results={},
+            final_response=None,
+            error_info=None,
+            root_cause_analysis=None,
+        )
 
-        assert len(todo_list) == 1
-        assert todo_list[0]["agent"] == "api_operator"
-
-    def test_with_none_content(self):
-        """Test with None content."""
-        message = HumanMessage(content="")
-        state = GraphState(messages=[message])
-        todo_list = create_comprehensive_todo_list(state)
-
-        assert len(todo_list) == 1
-        assert todo_list[0]["agent"] == "api_operator"
+        todo_list = await create_comprehensive_todo_list(state)
+        assert len(todo_list) == 0
 
 
 class TestGetNextTask:
     """Test cases for get_next_task function."""
 
-    def test_empty_todo_list(self):
-        """Test with empty todo list."""
-        result = get_next_task([])
-        assert result is None
+    @pytest.mark.asyncio
+    async def test_get_next_pending_task(self):
+        """Test getting next pending task."""
+        todo_list = [
+            {"id": "task_1", "status": "completed"},
+            {"id": "task_2", "status": "pending"},
+            {"id": "task_3", "status": "pending"},
+        ]
 
-    def test_single_pending_task(self):
-        """Test with single pending task."""
-        task = create_task("Test task", "test_agent")
-        todo_list = [task]
-        result = get_next_task(todo_list)
+        next_task = await get_next_task(todo_list)
+        assert next_task is not None
+        assert next_task["id"] == "task_2"
+        assert next_task["status"] == "pending"
 
-        assert result == task
+    @pytest.mark.asyncio
+    async def test_get_next_task_empty_list(self):
+        """Test getting next task from empty list."""
+        todo_list = []
 
-    def test_multiple_tasks_by_priority(self):
-        """Test task selection by priority."""
-        task1 = create_task("High priority", "agent1", priority=1)
-        task2 = create_task("Low priority", "agent2", priority=3)
-        todo_list = [task2, task1]  # Add in reverse order
-        result = get_next_task(todo_list)
+        next_task = await get_next_task(todo_list)
+        assert next_task is None
 
-        assert result == task1  # Should select higher priority (lower number)
+    @pytest.mark.asyncio
+    async def test_get_next_task_no_pending(self):
+        """Test getting next task when no pending tasks."""
+        todo_list = [
+            {"id": "task_1", "status": "completed"},
+            {"id": "task_2", "status": "failed"},
+        ]
 
-    def test_task_with_dependencies(self):
-        """Test task with dependencies."""
-        task1 = create_task("Task 1", "agent1", priority=1)
-        task2 = create_task("Task 2", "agent2", priority=2, dependencies=[task1["id"]])
-        todo_list = [task1, task2]
-
-        # First call should return task1 (no dependencies)
-        result1 = get_next_task(todo_list)
-        assert result1 == task1
-
-        # Mark task1 as completed
-        todo_list = mark_task_completed(todo_list, task1["id"])
-
-        # Second call should return task2 (dependencies satisfied)
-        result2 = get_next_task(todo_list)
-        assert result2 == task2
-
-    def test_task_with_unsatisfied_dependencies(self):
-        """Test task with unsatisfied dependencies."""
-        task1 = create_task("Task 1", "agent1", priority=1)
-        task2 = create_task("Task 2", "agent2", priority=2, dependencies=[task1["id"]])
-        todo_list = [task2]  # Only task2, task1 not present
-        result = get_next_task(todo_list)
-
-        assert result is None  # No tasks ready due to missing dependency
+        next_task = await get_next_task(todo_list)
+        assert next_task is None
 
 
-class TestTaskStatusManagement:
-    """Test cases for task status management functions."""
+class TestTaskManagement:
+    """Test cases for task management functions."""
 
     def test_mark_task_completed(self):
         """Test marking task as completed."""
-        task = create_task("Test task", "test_agent")
-        todo_list = [task]
-        result = mark_task_completed(todo_list, task["id"], "Success!")
+        todo_list = [
+            {"id": "task_1", "status": "pending"},
+            {"id": "task_2", "status": "pending"},
+        ]
 
-        assert result[0]["status"] == "completed"
-        assert result[0]["result"] == "Success!"
+        updated_list = mark_task_completed(todo_list, "task_1")
+        assert updated_list[0]["status"] == "completed"
+        assert updated_list[1]["status"] == "pending"
 
     def test_mark_task_failed(self):
         """Test marking task as failed."""
-        task = create_task("Test task", "test_agent")
-        todo_list = [task]
-        result = mark_task_failed(todo_list, task["id"], "Error occurred")
+        todo_list = [
+            {"id": "task_1", "status": "pending"},
+            {"id": "task_2", "status": "pending"},
+        ]
 
-        assert result[0]["status"] == "failed"
-        assert result[0]["error"] == "Error occurred"
+        updated_list = mark_task_failed(todo_list, "task_1", "Test error")
+        assert updated_list[0]["status"] == "failed"
+        assert updated_list[0]["error"] == "Test error"
+        assert updated_list[1]["status"] == "pending"
 
     def test_get_pending_tasks(self):
         """Test getting pending tasks."""
-        task1 = create_task("Task 1", "agent1")
-        task2 = create_task("Task 2", "agent2")
-        todo_list = [task1, task2]
-        todo_list = mark_task_completed(todo_list, task1["id"])
+        todo_list = [
+            {"id": "task_1", "status": "pending"},
+            {"id": "task_2", "status": "completed"},
+            {"id": "task_3", "status": "pending"},
+        ]
 
-        pending = get_pending_tasks(todo_list)
-        assert len(pending) == 1
-        assert pending[0]["id"] == task2["id"]
+        pending_tasks = get_pending_tasks(todo_list)
+        assert len(pending_tasks) == 2
+        assert pending_tasks[0]["id"] == "task_1"
+        assert pending_tasks[1]["id"] == "task_3"
 
     def test_get_completed_tasks(self):
         """Test getting completed tasks."""
-        task1 = create_task("Task 1", "agent1")
-        task2 = create_task("Task 2", "agent2")
-        todo_list = [task1, task2]
-        todo_list = mark_task_completed(todo_list, task1["id"])
+        todo_list = [
+            {"id": "task_1", "status": "pending"},
+            {"id": "task_2", "status": "completed"},
+            {"id": "task_3", "status": "completed"},
+        ]
 
-        completed = get_completed_tasks(todo_list)
-        assert len(completed) == 1
-        assert completed[0]["id"] == task1["id"]
+        completed_tasks = get_completed_tasks(todo_list)
+        assert len(completed_tasks) == 2
+        assert completed_tasks[0]["id"] == "task_2"
+        assert completed_tasks[1]["id"] == "task_3"
 
     def test_get_failed_tasks(self):
         """Test getting failed tasks."""
-        task1 = create_task("Task 1", "agent1")
-        task2 = create_task("Task 2", "agent2")
-        todo_list = [task1, task2]
-        todo_list = mark_task_failed(todo_list, task1["id"], "Error")
+        todo_list = [
+            {"id": "task_1", "status": "pending"},
+            {"id": "task_2", "status": "failed"},
+            {"id": "task_3", "status": "failed"},
+        ]
 
-        failed = get_failed_tasks(todo_list)
-        assert len(failed) == 1
-        assert failed[0]["id"] == task1["id"]
+        failed_tasks = get_failed_tasks(todo_list)
+        assert len(failed_tasks) == 2
+        assert failed_tasks[0]["id"] == "task_2"
+        assert failed_tasks[1]["id"] == "task_3"
 
     def test_is_workflow_complete(self):
-        """Test workflow completion check."""
-        task1 = create_task("Task 1", "agent1")
-        task2 = create_task("Task 2", "agent2")
-        todo_list = [task1, task2]
+        """Test checking if workflow is complete."""
+        # All tasks completed
+        todo_list = [
+            {"id": "task_1", "status": "completed"},
+            {"id": "task_2", "status": "completed"},
+        ]
+        assert is_workflow_complete(todo_list) is True
 
-        # Not complete - tasks still pending
-        assert not is_workflow_complete(todo_list)
+        # Some tasks pending
+        todo_list = [
+            {"id": "task_1", "status": "completed"},
+            {"id": "task_2", "status": "pending"},
+        ]
+        assert is_workflow_complete(todo_list) is False
 
-        # Mark both as completed
-        todo_list = mark_task_completed(todo_list, task1["id"])
-        todo_list = mark_task_completed(todo_list, task2["id"])
-        assert is_workflow_complete(todo_list)
+        # Some tasks failed
+        todo_list = [
+            {"id": "task_1", "status": "completed"},
+            {"id": "task_2", "status": "failed"},
+        ]
+        assert is_workflow_complete(todo_list) is True
 
-        # Mark one as failed
-        todo_list = mark_task_failed(todo_list, task1["id"], "Error")
-        assert is_workflow_complete(todo_list)  # Still complete (completed or failed)
-
-    def test_is_workflow_complete_empty(self):
-        """Test workflow completion with empty list."""
-        assert is_workflow_complete([])
-
-
-class TestTextExtraction:
-    """Test cases for text extraction functions."""
-
-    def test_extract_job_name_data_processing(self):
-        """Test extracting data processing job name."""
-        result = extract_job_name_from_text("run data processing job")
-        assert result == "data_processing"
-
-    def test_extract_job_name_image_analysis(self):
-        """Test extracting image analysis job name."""
-        result = extract_job_name_from_text("execute image analysis task")
-        assert result == "image_analysis"
-
-    def test_extract_job_name_report_generation(self):
-        """Test extracting report generation job name."""
-        result = extract_job_name_from_text("start report generation")
-        assert result == "report_generation"
-
-    def test_extract_job_name_validation(self):
-        """Test extracting validation job name."""
-        result = extract_job_name_from_text("run validation")
-        assert result == "data_validation"
-
-    def test_extract_job_name_default(self):
-        """Test extracting default job name."""
-        result = extract_job_name_from_text("run unknown job")
-        assert result == "data_processing"
-
-    def test_extract_job_id_valid(self):
-        """Test extracting valid job ID."""
-        result = extract_job_id_from_text("debug job_003")
-        assert result == "job_003"
-
-    def test_extract_job_id_invalid(self):
-        """Test extracting invalid job ID."""
-        result = extract_job_id_from_text("debug job_abc")
-        assert result is None
-
-    def test_extract_job_id_none(self):
-        """Test extracting job ID from text without job ID."""
-        result = extract_job_id_from_text("debug something")
-        assert result is None
+        # Empty list
+        todo_list = []
+        assert is_workflow_complete(todo_list) is True

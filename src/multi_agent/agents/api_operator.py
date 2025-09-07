@@ -7,13 +7,10 @@ This agent is responsible for all API calls and data retrieval operations.
 from __future__ import annotations
 from typing import Dict, Any
 from langchain_core.messages import AIMessage
-from multi_agent.state import GraphState
-from multi_agent.mocks.data import API_JOBS, API_SYSTEM_STATUS, get_job_result
-from multi_agent.mocks.planning import (
-    get_next_task,
-    mark_task_completed,
-    mark_task_failed,
-)
+from ..graph.state import GraphState
+from ..graph.planning import get_next_task
+from ..utils.mocks.data import API_JOBS, API_SYSTEM_STATUS, get_job_result
+from ..graph.planning import mark_task_completed, mark_task_failed
 
 
 class APIOperator:
@@ -59,17 +56,20 @@ class APIOperator:
             return {"error": f"Unknown tool: {tool_name}"}
 
 
-def api_operator_node(state: GraphState) -> GraphState:
+async def api_operator_node(state: GraphState) -> GraphState:
     """API Operator node that executes API calls based on task instructions."""
     if not state["messages"]:
-        return state
+        # No messages - set route to response_synthesizer
+        new_state = state.copy()
+        new_state["route"] = "response_synthesizer"
+        return new_state
 
     todo_list = state.get("todo_list", [])
     if not todo_list:
         return state
 
     # Get the next task for API operator
-    next_task = get_next_task(todo_list)
+    next_task = await get_next_task(todo_list)
     if not next_task or next_task["agent"] != "api_operator":
         return state
 
@@ -103,4 +103,8 @@ def api_operator_node(state: GraphState) -> GraphState:
 
     new_state["messages"] = msgs
     new_state["todo_list"] = todo_list
+
+    # Set next route - go to response_synthesizer to format results
+    new_state["route"] = "response_synthesizer"
+
     return new_state

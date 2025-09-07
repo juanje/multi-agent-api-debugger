@@ -2,8 +2,20 @@
 Unit tests for API Operator.
 """
 
+import os
+import pytest
 from langchain_core.messages import HumanMessage
-from multi_agent.api_operator import api_operator_node, APIOperator
+from multi_agent.agents.api_operator import api_operator_node, APIOperator
+
+
+@pytest.fixture(autouse=True)
+def enable_mocking():
+    """Enable LLM mocking for all tests in this module."""
+    os.environ["USE_LLM_MOCKS"] = "true"
+    yield
+    # Clean up after test
+    if "USE_LLM_MOCKS" in os.environ:
+        del os.environ["USE_LLM_MOCKS"]
 
 
 class TestAPIOperator:
@@ -64,23 +76,24 @@ class TestAPIOperator:
 class TestAPIOperatorNode:
     """Tests for api_operator_node function."""
 
-    def test_empty_messages(self):
+    async def test_empty_messages(self):
         """Test with empty messages."""
         state = {"messages": []}
-        result = api_operator_node(state)
-        assert result == state
+        result = await api_operator_node(state)
+        # With our fixes, empty messages should set route to response_synthesizer
+        assert result["route"] == "response_synthesizer"
 
-    def test_no_todo_list(self):
+    async def test_no_todo_list(self):
         """Test with no todo list."""
         state = {"messages": [HumanMessage(content="test")]}
-        result = api_operator_node(state)
+        result = await api_operator_node(state)
 
         # Should return state unchanged when no todo list
         assert result == state
 
-    def test_execute_tool(self):
+    async def test_execute_tool(self):
         """Test executing a tool from todo list."""
-        from multi_agent.mocks.planning import create_task
+        from multi_agent.utils.mocks.planning import create_task
 
         state = {
             "messages": [HumanMessage(content="list jobs")],
@@ -92,7 +105,7 @@ class TestAPIOperatorNode:
                 )
             ],
         }
-        result = api_operator_node(state)
+        result = await api_operator_node(state)
 
         assert "results" in result
         assert "list_public_jobs" in result["results"]

@@ -2,9 +2,23 @@
 Interactive chat for the multi-agent API debugger system.
 """
 
+import os
+import logging
 from langchain_core.messages import HumanMessage
+from .graph import get_graph
 
-from .graph import app
+# Disable LLM mocking to use real LLMs
+os.environ["USE_LLM_MOCKS"] = "false"
+
+# Configure logging to show only important messages
+logging.basicConfig(
+    level=logging.WARNING,  # Only show warnings and errors
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
+# Set specific loggers to INFO for debugging
+logging.getLogger("multi_agent.supervisor").setLevel(logging.INFO)
+logging.getLogger("multi_agent.routing").setLevel(logging.INFO)
 
 
 def print_welcome():
@@ -63,11 +77,16 @@ def print_debug_state(state: dict, route: str):
     print()
 
 
-def run_chat(
+async def run_chat(
     debug_mode: bool = False, history_mode: bool = False, thread_id: str = "default"
 ):
     """Runs the interactive chat."""
     print_welcome()
+
+    # LLM service will be initialized on demand
+    print("🔄 LLM service will be initialized on demand...")
+    print("✅ Ready to start")
+    print()
 
     if debug_mode:
         print("🐛 [DEBUG] Debug mode activated - complete state object will be shown")
@@ -114,16 +133,11 @@ def run_chat(
                 "knowledge_summary": None,
             }
 
-            # Execute the graph
-            for _ in app.stream(
+            # Execute the graph asynchronously
+            graph = get_graph()
+            final_state = await graph.ainvoke(
                 state, config={"configurable": {"thread_id": thread_id}}
-            ):
-                pass
-
-            # Get final result
-            final_state = app.get_state(
-                {"configurable": {"thread_id": thread_id}}
-            ).values
+            )
 
             # Show response
             if final_state["messages"]:

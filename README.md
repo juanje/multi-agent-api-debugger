@@ -4,8 +4,7 @@ An intelligent multi-agent system for API job management and automated debugging
 using [LangGraph](https://langchain-ai.github.io/langgraph/).
 
 > **NOTE:** This project uses mocked APIs and knowledge bases for demonstration purposes,
-> focusing on the architecture and agent orchestration patterns. This is a terminal-based
-> version optimized for command-line usage without markdown formatting.
+> focusing on the architecture and agent orchestration patterns.
 
 ## Features
 

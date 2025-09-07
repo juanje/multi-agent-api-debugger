@@ -2,7 +2,7 @@
 Unit tests for state.py
 """
 
-from multi_agent.state import GraphState
+from multi_agent.graph.state import GraphState
 
 
 class TestGraphState:

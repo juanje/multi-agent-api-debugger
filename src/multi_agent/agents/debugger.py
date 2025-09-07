@@ -8,13 +8,10 @@ root cause analysis with recommended actions.
 from __future__ import annotations
 from typing import Dict, Any
 from langchain_core.messages import AIMessage
-from multi_agent.state import GraphState
-from multi_agent.mocks.data import get_error_pattern
-from multi_agent.mocks.planning import (
-    get_next_task,
-    mark_task_completed,
-    mark_task_failed,
-)
+from ..graph.state import GraphState
+from ..graph.planning import get_next_task
+from ..utils.mocks.data import get_error_pattern
+from ..graph.planning import mark_task_completed, mark_task_failed
 
 
 class Debugger:
@@ -30,19 +27,28 @@ class Debugger:
         return get_error_pattern(error_code)
 
 
-def debugger_node(state: GraphState) -> GraphState:
+async def debugger_node(state: GraphState) -> GraphState:
     """Debugger node that analyzes errors and provides root cause analysis."""
     if not state["messages"]:
-        return state
+        # No messages - set route to response_synthesizer
+        new_state = state.copy()
+        new_state["route"] = "response_synthesizer"
+        return new_state
 
     todo_list = state.get("todo_list", [])
     if not todo_list:
-        return state
+        # No todo list - create a debugging task and go to response_synthesizer
+        new_state = state.copy()
+        new_state["route"] = "response_synthesizer"
+        return new_state
 
     # Get the next task for debugger
-    next_task = get_next_task(todo_list)
+    next_task = await get_next_task(todo_list)
     if not next_task or next_task["agent"] != "debugger":
-        return state
+        # No debugger task - go to response_synthesizer
+        new_state = state.copy()
+        new_state["route"] = "response_synthesizer"
+        return new_state
 
     # Check if there's error information to analyze
     error_info = state.get("error_info")
@@ -65,6 +71,7 @@ def debugger_node(state: GraphState) -> GraphState:
             )
             new_state = state.copy()
             new_state["todo_list"] = todo_list
+            new_state["route"] = "response_synthesizer"
             return new_state
 
     # Perform root cause analysis
@@ -101,5 +108,8 @@ Related Components: {", ".join(analysis["related_components"])}
 
     msgs.append(AIMessage(content=summary))
     new_state["messages"] = msgs
+
+    # Set next route - go to response_synthesizer to format final response
+    new_state["route"] = "response_synthesizer"
 
     return new_state

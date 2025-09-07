@@ -7,10 +7,16 @@ response that will be presented to the user.
 
 from __future__ import annotations
 from typing import Dict, Any, List
+import logging
 from langchain_core.messages import AIMessage
-from multi_agent.state import GraphState
-from multi_agent.mocks.data import get_response_template
-from multi_agent.mocks.planning import get_next_task, mark_task_completed
+from ..graph.state import GraphState
+from ..graph.planning import get_next_task
+from ..utils.mocks.data import get_response_template
+from ..graph.planning import mark_task_completed
+from ..llm import get_llm_service, AgentType, should_use_mocks
+from ..llm.llm_service import LLMServiceError
+
+logger = logging.getLogger(__name__)
 
 
 class ResponseSynthesizer:
@@ -20,19 +26,113 @@ class ResponseSynthesizer:
         """Initialize the Response Synthesizer."""
         pass
 
-    def synthesize_response(self, state: GraphState) -> str:
+    async def synthesize_response(self, state: GraphState) -> str:
         """Synthesize a response based on the current state."""
-        # Check what type of response to generate
-        if state.get("root_cause_analysis"):
-            return self._format_debugging_response(state)
-        elif state.get("error_info"):
-            return self._format_api_error_response(state)
-        elif state.get("results"):
-            return self._format_api_success_response(state)
-        elif self._has_knowledge_response(state):
-            return self._format_knowledge_response(state)
+        if should_use_mocks():
+            # Use template-based responses for testing
+            if state.get("root_cause_analysis"):
+                return self._format_debugging_response(state)
+            elif state.get("error_info"):
+                return self._format_api_error_response(state)
+            elif state.get("results"):
+                return self._format_api_success_response(state)
+            elif self._has_knowledge_response(state):
+                return self._format_knowledge_response(state)
+            else:
+                return self._format_general_response(state)
         else:
+            # Use LLM for real responses
+            return self._synthesize_with_llm(state)
+
+    def _synthesize_with_llm(self, state: GraphState) -> str:
+        """Synthesize response using LLM."""
+        try:
+            service = get_llm_service()
+
+            # Build context for the LLM
+            context_parts = []
+
+            # Add user message
+            messages = state.get("messages", [])
+            if messages:
+                last_user_message = None
+                for msg in reversed(messages):
+                    if hasattr(msg, "content") and not str(msg.content).startswith(
+                        ("🎯", "🔧", "📋", "✅", "❌", "🔍", "📚")
+                    ):
+                        last_user_message = str(msg.content)
+                        break
+                if last_user_message:
+                    context_parts.append(f"User request: {last_user_message}")
+
+            # Add results if available
+            results = state.get("results", {})
+            if results:
+                context_parts.append(f"API Results: {results}")
+
+            # Add error info if available
+            error_info = state.get("error_info", {})
+            if error_info:
+                context_parts.append(f"Error Information: {error_info}")
+
+            # Add root cause analysis if available
+            root_cause = state.get("root_cause_analysis", {})
+            if root_cause:
+                context_parts.append(f"Root Cause Analysis: {root_cause}")
+
+            # Add knowledge response if available
+            if self._has_knowledge_response(state):
+                knowledge_content = self._extract_knowledge_content(state)
+                if knowledge_content:
+                    context_parts.append(
+                        f"Knowledge Base Response: {knowledge_content}"
+                    )
+
+            context = (
+                "\n\n".join(context_parts)
+                if context_parts
+                else "No specific context available"
+            )
+
+            prompt = f"""You are a Response Synthesizer agent. Your job is to create a clear, helpful, and professional response for the user based on the system's execution results.
+
+Context:
+{context}
+
+Please create a well-formatted response that:
+1. Acknowledges what the user requested
+2. Summarizes what was accomplished
+3. Presents the results clearly and concisely
+4. Provides any relevant next steps or recommendations
+5. Uses appropriate emojis and formatting for clarity
+
+Make the response conversational but professional, and ensure it's easy to understand."""
+
+            response = service.generate_with_system_prompt(
+                AgentType.RESPONSE_SYNTHESIZER, prompt
+            )
+
+            return response
+
+        except LLMServiceError as e:
+            logger.error(f"LLM service error in response synthesis: {e}")
+            # Fallback to template-based response
             return self._format_general_response(state)
+        except Exception as e:
+            logger.error(f"Unexpected error in response synthesis: {e}")
+            return self._format_general_response(state)
+
+    def _extract_knowledge_content(self, state: GraphState) -> str:
+        """Extract knowledge content from messages."""
+        messages = state.get("messages", [])
+        for msg in messages:
+            if hasattr(msg, "content") and "📚 Knowledge Assistant:" in str(
+                msg.content
+            ):
+                content = str(msg.content)
+                if "📚 Knowledge Assistant:" in content:
+                    return content.split("📚 Knowledge Assistant:", 1)[1].strip()
+        return ""
 
     def _format_api_success_response(self, state: GraphState) -> str:
         """Format response for successful API operations."""
@@ -196,15 +296,18 @@ class ResponseSynthesizer:
         return summary
 
 
-def response_synthesizer_node(state: GraphState) -> GraphState:
+async def response_synthesizer_node(state: GraphState) -> GraphState:
     """Response Synthesizer node that formats the final response."""
     if not state["messages"]:
-        return state
+        # No messages - set route to done (workflow complete)
+        new_state = state.copy()
+        new_state["route"] = "done"
+        return new_state
 
     todo_list = state.get("todo_list") or []
 
     # Get the next task for response synthesizer (if any)
-    next_task = get_next_task(todo_list)
+    next_task = await get_next_task(todo_list)
     if next_task and next_task["agent"] == "response_synthesizer":
         # This is a specific synthesis task
         msgs = list(state["messages"])
@@ -219,7 +322,7 @@ def response_synthesizer_node(state: GraphState) -> GraphState:
         msgs = list(state["messages"])
 
     synthesizer = ResponseSynthesizer()
-    final_response = synthesizer.synthesize_response(state)
+    final_response = await synthesizer.synthesize_response(state)
     knowledge_summary = synthesizer.create_knowledge_summary(state)
 
     new_state = state.copy()
@@ -231,5 +334,8 @@ def response_synthesizer_node(state: GraphState) -> GraphState:
     # Add final response message
     msgs.append(AIMessage(content=final_response))
     new_state["messages"] = msgs
+
+    # Set route to done - workflow is complete
+    new_state["route"] = "done"
 
     return new_state

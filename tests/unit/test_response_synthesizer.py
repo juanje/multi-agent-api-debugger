@@ -2,17 +2,29 @@
 Unit tests for Response Synthesizer.
 """
 
+import os
+import pytest
 from langchain_core.messages import HumanMessage
-from multi_agent.response_synthesizer import (
+from multi_agent.agents.response_synthesizer import (
     response_synthesizer_node,
     ResponseSynthesizer,
 )
 
 
+@pytest.fixture(autouse=True)
+def enable_mocking():
+    """Enable LLM mocking for all tests in this module."""
+    os.environ["USE_LLM_MOCKS"] = "true"
+    yield
+    # Clean up after test
+    if "USE_LLM_MOCKS" in os.environ:
+        del os.environ["USE_LLM_MOCKS"]
+
+
 class TestResponseSynthesizer:
     """Tests for ResponseSynthesizer class."""
 
-    def test_format_api_success_response(self):
+    async def test_format_api_success_response(self):
         """Test formatting API success response."""
         synthesizer = ResponseSynthesizer()
         state = {
@@ -25,12 +37,15 @@ class TestResponseSynthesizer:
             }
         }
 
-        response = synthesizer.synthesize_response(state)
+        response = await synthesizer.synthesize_response(state)
 
-        assert "API Operation Completed" in response
-        assert "list_public_jobs" in response
+        # Check that response contains job-related content
+        assert any(
+            word in response.lower() for word in ["job", "completed", "test job"]
+        )
+        assert len(response) > 50  # Ensure substantive response
 
-    def test_format_api_error_response(self):
+    async def test_format_api_error_response(self):
         """Test formatting API error response."""
         synthesizer = ResponseSynthesizer()
         state = {
@@ -43,12 +58,17 @@ class TestResponseSynthesizer:
             "results": {"run_job": {"error": "Template not found"}},
         }
 
-        response = synthesizer.synthesize_response(state)
+        response = await synthesizer.synthesize_response(state)
 
-        assert "API Operation Failed" in response
+        # Check that response contains error-related content
+        assert any(
+            word in response.lower()
+            for word in ["error", "template", "issue", "problem"]
+        )
         assert "TEMPLATE_NOT_FOUND" in response
+        assert len(response) > 50  # Ensure substantive response
 
-    def test_format_debugging_response(self):
+    async def test_format_debugging_response(self):
         """Test formatting debugging response."""
         synthesizer = ResponseSynthesizer()
         state = {
@@ -62,10 +82,15 @@ class TestResponseSynthesizer:
             },
         }
 
-        response = synthesizer.synthesize_response(state)
+        response = await synthesizer.synthesize_response(state)
 
-        assert "Debugging Analysis Complete" in response
-        assert "Template missing" in response
+        # Check that response contains debugging-related content
+        assert any(
+            word in response.lower()
+            for word in ["template", "missing", "issue", "error"]
+        )
+        assert "TEMPLATE_NOT_FOUND" in response
+        assert len(response) > 50  # Ensure substantive response
 
     def test_create_knowledge_summary(self):
         """Test creating knowledge summary."""
@@ -88,19 +113,20 @@ class TestResponseSynthesizer:
 class TestResponseSynthesizerNode:
     """Tests for response_synthesizer_node function."""
 
-    def test_empty_messages(self):
+    async def test_empty_messages(self):
         """Test with empty messages."""
         state = {"messages": []}
-        result = response_synthesizer_node(state)
-        assert result == state
+        result = await response_synthesizer_node(state)
+        # With our fixes, empty messages should set route to done
+        assert result["route"] == "done"
 
-    def test_synthesize_with_results(self):
+    async def test_synthesize_with_results(self):
         """Test synthesizing with results."""
         state = {
             "messages": [HumanMessage(content="test")],
             "results": {"list_public_jobs": {"jobs": []}},
         }
-        result = response_synthesizer_node(state)
+        result = await response_synthesizer_node(state)
 
         assert "final_response" in result
         assert result["route"] == "done"

@@ -2,6 +2,7 @@
 Main CLI for the multi-agent API debugger system.
 """
 
+import asyncio
 import subprocess
 import sys
 
@@ -25,7 +26,7 @@ def cli():
 )
 def chat(debug: bool, history: bool, thread_id: str):
     """Start interactive chat with the multi-agent system."""
-    run_chat(debug_mode=debug, history_mode=history, thread_id=thread_id)
+    asyncio.run(run_chat(debug_mode=debug, history_mode=history, thread_id=thread_id))
 
 
 @cli.command()
@@ -56,9 +57,10 @@ def test(verbose: bool, coverage: bool):
 @click.option("--thread-id", default="demo", help="Thread ID for the demo")
 def demo(thread_id: str):
     """Run a demonstration of the system capabilities."""
-    from .demo import run_demo
+    import asyncio
+    from .utils.demo import run_demo
 
-    run_demo(thread_id=thread_id)
+    asyncio.run(run_demo(thread_id=thread_id))
 
 
 @cli.command()

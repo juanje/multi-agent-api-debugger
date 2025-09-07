@@ -4,10 +4,10 @@ Demo module for showcasing the multi-agent API debugger capabilities.
 
 from langchain_core.messages import HumanMessage
 
-from .graph import app
+from ..graph import get_graph
 
 
-def run_demo(thread_id: str = "demo"):
+async def run_demo(thread_id: str = "demo"):
     """Run a demonstration of the system capabilities."""
     print("🎬 MULTI-AGENT API DEBUGGER DEMO")
     print("=" * 50)
@@ -45,7 +45,8 @@ def run_demo(thread_id: str = "demo"):
 
         # Execute the command
         print("🤖 Processing...")
-        result = app.invoke(
+        graph = get_graph()
+        result = await graph.ainvoke(
             {"messages": [HumanMessage(content=scenario["command"])]},
             config={"configurable": {"thread_id": f"{thread_id}-{i}"}},
         )

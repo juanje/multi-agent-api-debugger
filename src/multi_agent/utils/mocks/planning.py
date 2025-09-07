@@ -7,7 +7,7 @@ by an LLM in a real implementation for task decomposition and management.
 
 from __future__ import annotations
 from typing import List, Dict, Any, Optional
-from multi_agent.state import GraphState
+from ...graph.state import GraphState
 
 
 # Global task counter for generating unique task IDs

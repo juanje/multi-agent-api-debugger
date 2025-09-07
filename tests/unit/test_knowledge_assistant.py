@@ -2,8 +2,20 @@
 Unit tests for Knowledge Assistant.
 """
 
+import os
+import pytest
 from langchain_core.messages import HumanMessage
-from multi_agent.knowledge_assistant import knowledge_assistant_node, KnowledgeAssistant
+from multi_agent.agents.knowledge_assistant import knowledge_assistant_node, KnowledgeAssistant
+
+
+@pytest.fixture(autouse=True)
+def enable_mocking():
+    """Enable LLM mocking for all tests in this module."""
+    os.environ["USE_LLM_MOCKS"] = "true"
+    yield
+    # Clean up after test
+    if "USE_LLM_MOCKS" in os.environ:
+        del os.environ["USE_LLM_MOCKS"]
 
 
 class TestKnowledgeAssistant:
@@ -51,15 +63,16 @@ class TestKnowledgeAssistant:
 class TestKnowledgeAssistantNode:
     """Tests for knowledge_assistant_node function."""
 
-    def test_empty_messages(self):
+    async def test_empty_messages(self):
         """Test with empty messages."""
         state = {"messages": []}
-        result = knowledge_assistant_node(state)
-        assert result == state
+        result = await knowledge_assistant_node(state)
+        # With our fixes, empty messages should set route to response_synthesizer
+        assert result["route"] == "response_synthesizer"
 
-    def test_api_question(self):
+    async def test_api_question(self):
         """Test with API question."""
-        from multi_agent.mocks.planning import create_task
+        from multi_agent.utils.mocks.planning import create_task
 
         state = {
             "messages": [HumanMessage(content="what is the API?")],
@@ -71,15 +84,15 @@ class TestKnowledgeAssistantNode:
                 )
             ],
         }
-        result = knowledge_assistant_node(state)
+        result = await knowledge_assistant_node(state)
 
         assert len(result["messages"]) > 1
         # Should have the original message plus assistant response
         assert any("API" in str(msg.content) for msg in result["messages"][1:])
 
-    def test_jobs_question(self):
+    async def test_jobs_question(self):
         """Test with jobs question."""
-        from multi_agent.mocks.planning import create_task
+        from multi_agent.utils.mocks.planning import create_task
 
         state = {
             "messages": [HumanMessage(content="tell me about jobs")],
@@ -91,7 +104,7 @@ class TestKnowledgeAssistantNode:
                 )
             ],
         }
-        result = knowledge_assistant_node(state)
+        result = await knowledge_assistant_node(state)
 
         assert len(result["messages"]) > 1
         assert any("jobs" in str(msg.content).lower() for msg in result["messages"][1:])

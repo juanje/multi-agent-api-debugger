@@ -8,9 +8,10 @@ from the knowledge base to answer user questions.
 from __future__ import annotations
 from typing import Dict, Any, List
 from langchain_core.messages import AIMessage
-from multi_agent.state import GraphState
-from multi_agent.mocks.data import search_knowledge
-from multi_agent.mocks.planning import get_next_task, mark_task_completed
+from ..graph.state import GraphState
+from ..graph.planning import get_next_task
+from ..utils.mocks.data import search_knowledge
+from ..graph.planning import mark_task_completed
 
 
 class KnowledgeAssistant:
@@ -47,17 +48,20 @@ class KnowledgeAssistant:
         return "\n".join(answer_parts)
 
 
-def knowledge_assistant_node(state: GraphState) -> GraphState:
+async def knowledge_assistant_node(state: GraphState) -> GraphState:
     """Knowledge Assistant node that answers questions from the knowledge base."""
     if not state["messages"]:
-        return state
+        # No messages - set route to response_synthesizer
+        new_state = state.copy()
+        new_state["route"] = "response_synthesizer"
+        return new_state
 
     todo_list = state.get("todo_list", [])
     if not todo_list:
         return state
 
     # Get the next task for knowledge assistant
-    next_task = get_next_task(todo_list)
+    next_task = await get_next_task(todo_list)
     if not next_task or next_task["agent"] != "knowledge_assistant":
         return state
 
@@ -91,4 +95,8 @@ def knowledge_assistant_node(state: GraphState) -> GraphState:
     new_state["todo_list"] = todo_list
 
     new_state["messages"] = msgs
+
+    # Set next route - go to response_synthesizer to format final response
+    new_state["route"] = "response_synthesizer"
+
     return new_state
