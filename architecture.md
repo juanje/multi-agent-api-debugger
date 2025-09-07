@@ -61,13 +61,16 @@ graph TD
     Supervisor -->|"Error requires analysis"| Debugger  
     Debugger -->|"Provides Root Cause Analysis"| Response_Synthesizer  
     Debugger -->|"Needs more logs/data"| API_Operator
+    Debugger -->|"Searches previous errors"| LTM
 
     %% Conversational flow  
     Knowledge_Assistant -->|"Generated Answer"| Response_Synthesizer  
     Knowledge_Assistant -->|"Searches documentation"| RAG_Docs
+    Knowledge_Assistant -->|"Searches stored memories"| LTM
 
     %% Finalization flow  
     Response_Synthesizer -->|"Final user-facing response"| User
+    Response_Synthesizer -->|"Store user Q&A"| LTM
 
     %% State interaction is implicit at every step in the graph  
     Supervisor -.-> Graph_State  
