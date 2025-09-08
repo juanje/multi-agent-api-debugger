@@ -106,14 +106,14 @@ The system follows a multi-agent architecture with specialized agents:
 
 ```mermaid
 graph TD
-    A[User Input] --> B[Supervisor]
+    A[👤 User Input] --> B[🤖 Supervisor]
     B --> C{Request Type?}
     
-    C -->|API Operations| D[API Operator]
-    C -->|Debugging| E[Debugger]
-    C -->|Knowledge Query| F[Knowledge Assistant]
+    C -->|API Operations| D[🛠️ API Operator]
+    C -->|Debugging| E[🐞 Debugger]
+    C -->|Knowledge Query| F[💬 Knowledge Assistant]
     
-    D --> G[Response Synthesizer]
+    D --> G[📝 Response Synthesizer]
     E --> G
     F --> G
     
@@ -132,7 +132,6 @@ graph TD
     end
     
     subgraph "Knowledge Assistant"
-        F --> F1[Knowledge Search]
         F --> F2[Answer Generation]
     end
     
@@ -140,6 +139,16 @@ graph TD
         G --> G1[Format Results]
         G --> G2[Create Summary]
     end
+
+    subgraph "Knowledge & Data Stores"
+        I1[💾 Long-Term Memory]
+        I2[📚 RAG Documents]
+    end
+
+    F -->|"Searches documentation"| I2
+    F <-->|"Search porevious responsess"| I1
+    G -->|"Store Q&A for later"| I1
+    E <-->|"Search previous errors"| I1
 ```
 
 ## Development
