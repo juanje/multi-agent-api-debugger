@@ -6,7 +6,7 @@ from .llm_mocks import should_use_mocks
 
 __all__ = [
     "get_agent_config",
-    "AgentType", 
+    "AgentType",
     "LLMService",
     "get_llm_service",
     "should_use_mocks",

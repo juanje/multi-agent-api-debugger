@@ -21,7 +21,8 @@ def enable_mocking():
 class TestDebugger:
     """Tests for Debugger class."""
 
-    def test_analyze_error_template_not_found(self):
+    @pytest.mark.asyncio
+    async def test_analyze_error_template_not_found(self):
         """Test analyzing TEMPLATE_NOT_FOUND error."""
         debugger = Debugger()
         error_info = {
@@ -31,7 +32,7 @@ class TestDebugger:
             "suggestions": ["Check template name"],
         }
 
-        analysis = debugger.analyze_error(error_info)
+        analysis = await debugger.analyze_error(error_info)
 
         assert analysis["error_code"] == "TEMPLATE_NOT_FOUND"
         assert "root_cause_hypothesis" in analysis
@@ -39,7 +40,8 @@ class TestDebugger:
         assert "recommended_actions" in analysis
         assert analysis["confidence_level"] == "High"
 
-    def test_analyze_error_memory_limit(self):
+    @pytest.mark.asyncio
+    async def test_analyze_error_memory_limit(self):
         """Test analyzing MEMORY_LIMIT_EXCEEDED error."""
         debugger = Debugger()
         error_info = {
@@ -48,13 +50,14 @@ class TestDebugger:
             "timestamp": "2024-01-15T10:00:00Z",
         }
 
-        analysis = debugger.analyze_error(error_info)
+        analysis = await debugger.analyze_error(error_info)
 
         assert analysis["error_code"] == "MEMORY_LIMIT_EXCEEDED"
         assert analysis["confidence_level"] == "Medium"
         assert analysis["severity"] == "High"
 
-    def test_analyze_unknown_error(self):
+    @pytest.mark.asyncio
+    async def test_analyze_unknown_error(self):
         """Test analyzing unknown error."""
         debugger = Debugger()
         error_info = {
@@ -63,7 +66,7 @@ class TestDebugger:
             "timestamp": "2024-01-15T10:00:00Z",
         }
 
-        analysis = debugger.analyze_error(error_info)
+        analysis = await debugger.analyze_error(error_info)
 
         assert analysis["error_code"] == "UNKNOWN_ERROR"
         assert analysis["confidence_level"] == "Low"
