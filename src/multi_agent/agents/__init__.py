@@ -9,7 +9,7 @@ from .response_synthesizer import response_synthesizer_node, ResponseSynthesizer
 __all__ = [
     "supervisor_node",
     "Supervisor",
-    "api_operator_node", 
+    "api_operator_node",
     "APIOperator",
     "debugger_node",
     "Debugger",

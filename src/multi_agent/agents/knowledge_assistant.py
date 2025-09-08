@@ -6,12 +6,14 @@ from the knowledge base to answer user questions.
 """
 
 from __future__ import annotations
-from typing import Dict, Any, List
+from typing import Dict, Any, List, cast
 from langchain_core.messages import AIMessage
 from ..graph.state import GraphState
 from ..graph.planning import get_next_task
 from ..utils.mocks.data import search_knowledge
 from ..graph.planning import mark_task_completed
+from ..memory import get_ltm_service
+from ..llm import should_use_mocks
 
 
 class KnowledgeAssistant:
@@ -25,25 +27,61 @@ class KnowledgeAssistant:
         """Search the knowledge base for relevant information."""
         return search_knowledge(query)
 
-    def generate_answer(self, query: str) -> str:
+    async def generate_answer(self, query: str) -> str:
         """Generates an answer based on the retrieved knowledge."""
-        search_results = self.search_knowledge(query)
-
-        if not search_results:
-            return "I don't have information about that topic in my knowledge base. Please try rephrasing your question or ask about API, jobs, authentication, templates, or debugging."
-
-        # Build answer from search results
         answer_parts = []
 
-        for i, result in enumerate(search_results, 1):
-            answer_parts.append(f"{result['term'].title()}: {result['content']}")
+        # First, search Long Term Memory for relevant historical Q&As (only in production mode)
+        ltm_results = []
+        if not should_use_mocks():
+            try:
+                ltm_service = get_ltm_service()
+                ltm_results = await ltm_service.search_knowledge(query, limit=2)
+            except Exception:
+                # Don't fail if LTM search fails
+                pass
 
-            if result.get("related_topics"):
-                related = ", ".join(result["related_topics"])
-                answer_parts.append(f"Related topics: {related}")
+        # If we found relevant results in LTM, use them to enhance the answer
+        if ltm_results:
+            answer_parts.append("📚 Based on previous interactions:")
+            for i, result in enumerate(ltm_results[:2], 1):
+                memory = result.memory
+                # Extract key insights from historical responses
+                response_preview = (
+                    memory.system_response[:200] + "..."
+                    if len(memory.system_response) > 200
+                    else memory.system_response
+                )
+                similarity = round(result.similarity_score, 2)
+                answer_parts.append(
+                    f"{i}. (Similarity: {similarity}) {response_preview}"
+                )
 
-            if i < len(search_results):
-                answer_parts.append("")  # Add spacing between results
+            answer_parts.append("")  # Add spacing
+
+        # Then search the static knowledge base
+        search_results = self.search_knowledge(query)
+
+        if search_results:
+            if ltm_results:
+                answer_parts.append("📖 Additional information from knowledge base:")
+
+            for i, search_item in enumerate(search_results, 1):
+                search_result = cast(Dict[str, Any], search_item)
+                answer_parts.append(
+                    f"{search_result['term'].title()}: {search_result['content']}"
+                )
+
+                if search_result.get("related_topics"):
+                    related = ", ".join(search_result["related_topics"])
+                    answer_parts.append(f"Related topics: {related}")
+
+                if i < len(search_results):
+                    answer_parts.append("")  # Add spacing between results
+
+        elif not ltm_results:
+            # No results from either source
+            return "I don't have information about that topic in my knowledge base or previous interactions. Please try rephrasing your question or ask about API, jobs, authentication, templates, or debugging."
 
         return "\n".join(answer_parts)
 
@@ -83,7 +121,7 @@ async def knowledge_assistant_node(state: GraphState) -> GraphState:
 
     # Create knowledge assistant and get answer
     assistant = KnowledgeAssistant()
-    answer = assistant.generate_answer(query)
+    answer = await assistant.generate_answer(query)
 
     new_state = state.copy()
     msgs = list(new_state["messages"])

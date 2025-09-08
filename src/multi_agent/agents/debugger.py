@@ -12,6 +12,8 @@ from ..graph.state import GraphState
 from ..graph.planning import get_next_task
 from ..utils.mocks.data import get_error_pattern
 from ..graph.planning import mark_task_completed, mark_task_failed
+from ..memory import get_ltm_service, LTM_CONFIDENCE_THRESHOLD
+from ..llm import should_use_mocks
 
 
 class Debugger:
@@ -21,10 +23,57 @@ class Debugger:
         """Initialize the Debugger."""
         pass
 
-    def analyze_error(self, error_info: Dict[str, Any]) -> Dict[str, Any]:
+    async def analyze_error(self, error_info: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze error and provide root cause analysis."""
         error_code = error_info.get("error_code", "UNKNOWN_ERROR")
-        return get_error_pattern(error_code)
+        analysis = get_error_pattern(error_code)
+
+        # Enhance analysis with similar cases from LTM (only in production mode)
+        if not should_use_mocks():
+            try:
+                ltm_service = get_ltm_service()
+                error_message = error_info.get("error_message", "")
+                similar_errors = await ltm_service.search_similar_errors(
+                    error_code, error_message, limit=3
+                )
+
+                if similar_errors:
+                    # Add historical context to analysis
+                    historical_insights = []
+                    for result in similar_errors:
+                        memory = result.memory
+                        confidence = memory.confidence_level or "Unknown"
+                        severity = memory.severity or "Unknown"
+                        historical_insights.append(
+                            {
+                                "confidence": confidence,
+                                "severity": severity,
+                                "similarity_score": round(result.similarity_score, 2),
+                                "timestamp": memory.timestamp,
+                            }
+                        )
+
+                    analysis["historical_cases"] = historical_insights
+                    analysis["enhanced_with_ltm"] = True
+
+                    # Update confidence if we have high-confidence historical cases
+                    high_confidence_cases = [
+                        case
+                        for case in historical_insights
+                        if case["confidence"] == "High"
+                        and isinstance(case["similarity_score"], (int, float))
+                        and case["similarity_score"] > LTM_CONFIDENCE_THRESHOLD
+                    ]
+                    if high_confidence_cases:
+                        analysis["confidence_level"] = (
+                            "High (confirmed by historical cases)"
+                        )
+
+            except Exception as e:
+                # Don't fail analysis if LTM lookup fails
+                analysis["ltm_search_error"] = str(e)
+
+        return analysis
 
 
 async def debugger_node(state: GraphState) -> GraphState:
@@ -76,7 +125,7 @@ async def debugger_node(state: GraphState) -> GraphState:
 
     # Perform root cause analysis
     debugger = Debugger()
-    analysis = debugger.analyze_error(error_info)
+    analysis = await debugger.analyze_error(error_info)
 
     new_state = state.copy()
     msgs = list(new_state["messages"])

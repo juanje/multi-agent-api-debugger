@@ -14,6 +14,7 @@ using [LangGraph](https://langchain-ai.github.io/langgraph/).
 - **📝 Response Synthesis**: Format and present results clearly
 - **🔄 Agent Orchestration**: Intelligent routing between specialized agents
 - **💾 State Management**: Persistent conversation context
+- **🧠 Long Term Memory (LTM)**: Learn from past interactions for smarter responses
 
 ## Installation
 
@@ -49,6 +50,12 @@ uv run multi-agent test
 # Show system info
 uv run multi-agent info
 
+# View memory statistics
+uv run multi-agent memory --stats
+
+# View recent memories
+uv run multi-agent memory --recent 10
+
 # Show help
 uv run multi-agent --help
 ```
@@ -71,6 +78,11 @@ uv run multi-agent --help
 - `how do I authenticate?` → Get authentication help
 - `explain job templates` → Learn about templates
 - `what are common errors?` → Get error information
+
+### Long Term Memory
+- `multi-agent memory --stats` → View memory statistics and recent interactions
+- `multi-agent memory --recent 10` → Show last 10 stored memories
+- System automatically learns from all interactions to provide better responses
 
 ## Architecture
 
@@ -184,9 +196,16 @@ Key areas with excellent coverage:
 Each agent has a specific role and set of capabilities:
 - **Supervisor**: Routes requests and manages workflow
 - **API Operator**: Handles all external API interactions
-- **Debugger**: Analyzes errors and provides solutions
-- **Knowledge Assistant**: Answers questions from knowledge base
-- **Response Synthesizer**: Formats and presents results
+- **Debugger**: Analyzes errors and provides solutions (enhanced with LTM for similar cases)
+- **Knowledge Assistant**: Answers questions from knowledge base (enhanced with LTM history)
+- **Response Synthesizer**: Formats and presents results (stores interactions in LTM)
+
+### Long Term Memory (LTM)
+- **Semantic Search**: Uses ChromaDB + sentence transformers for intelligent similarity matching
+- **Automatic Storage**: Every interaction is automatically saved for future reference
+- **Smart Enhancement**: Agents use historical data to provide more informed responses
+- **Privacy Focused**: Data stored locally, no external services required
+- **Production Mode**: LTM only active in production mode (disabled for tests/mocks)
 
 ## 🤖 AI Tools Disclaimer
 

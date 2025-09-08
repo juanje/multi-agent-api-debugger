@@ -5,7 +5,10 @@ Unit tests for Knowledge Assistant.
 import os
 import pytest
 from langchain_core.messages import HumanMessage
-from multi_agent.agents.knowledge_assistant import knowledge_assistant_node, KnowledgeAssistant
+from multi_agent.agents.knowledge_assistant import (
+    knowledge_assistant_node,
+    KnowledgeAssistant,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -44,18 +47,20 @@ class TestKnowledgeAssistant:
 
         assert len(results) == 0
 
-    def test_generate_answer(self):
+    @pytest.mark.asyncio
+    async def test_generate_answer(self):
         """Test generating answer from search results."""
         assistant = KnowledgeAssistant()
-        answer = assistant.generate_answer("API")
+        answer = await assistant.generate_answer("API")
 
         assert "API" in answer
         assert "endpoints" in answer
 
-    def test_generate_answer_no_results(self):
+    @pytest.mark.asyncio
+    async def test_generate_answer_no_results(self):
         """Test generating answer with no search results."""
         assistant = KnowledgeAssistant()
-        answer = assistant.generate_answer("completely unknown topic")
+        answer = await assistant.generate_answer("completely unknown topic")
 
         assert "don't have information" in answer.lower()
 

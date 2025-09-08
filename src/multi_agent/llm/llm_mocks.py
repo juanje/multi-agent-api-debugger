@@ -21,12 +21,30 @@ class LLMMockResponses:
     # Mock responses for routing
     ROUTE_RESPONSES = {
         "list": {"next_agent": "api_operator", "reasoning": "User wants to list items"},
-        "run": {"next_agent": "api_operator", "reasoning": "User wants to execute something"},
-        "debug": {"next_agent": "debugger", "reasoning": "User wants to debug an issue"},
-        "error": {"next_agent": "debugger", "reasoning": "Error mentioned in the request"},
-        "what": {"next_agent": "knowledge_assistant", "reasoning": "User is asking a question"},
-        "how": {"next_agent": "knowledge_assistant", "reasoning": "User is asking for information"},
-        "help": {"next_agent": "knowledge_assistant", "reasoning": "User needs assistance"},
+        "run": {
+            "next_agent": "api_operator",
+            "reasoning": "User wants to execute something",
+        },
+        "debug": {
+            "next_agent": "debugger",
+            "reasoning": "User wants to debug an issue",
+        },
+        "error": {
+            "next_agent": "debugger",
+            "reasoning": "Error mentioned in the request",
+        },
+        "what": {
+            "next_agent": "knowledge_assistant",
+            "reasoning": "User is asking a question",
+        },
+        "how": {
+            "next_agent": "knowledge_assistant",
+            "reasoning": "User is asking for information",
+        },
+        "help": {
+            "next_agent": "knowledge_assistant",
+            "reasoning": "User needs assistance",
+        },
     }
 
     # Mock task creation templates
@@ -209,7 +227,9 @@ def get_mock_api_operations_extraction(text: str) -> list:
         job_name = "data_processing"  # Default for tests
         if "data_processing" in text_lower:
             job_name = "data_processing"
-        operations.append({"operation": "run_job", "parameters": {"job_name": job_name}})
+        operations.append(
+            {"operation": "run_job", "parameters": {"job_name": job_name}}
+        )
     elif "status" in text_lower:
         operations.append({"operation": "check_system_status", "parameters": {}})
     elif "result" in text_lower:
@@ -217,7 +237,9 @@ def get_mock_api_operations_extraction(text: str) -> list:
         job_id = "job_123"  # Default for tests
         if "job_123" in text:
             job_id = "job_123"
-        operations.append({"operation": "get_job_results", "parameters": {"job_id": job_id}})
+        operations.append(
+            {"operation": "get_job_results", "parameters": {"job_id": job_id}}
+        )
 
     return operations
 

@@ -15,6 +15,7 @@ from ..utils.mocks.data import get_response_template
 from ..graph.planning import mark_task_completed
 from ..llm import get_llm_service, AgentType, should_use_mocks
 from ..llm.llm_service import LLMServiceError
+from ..memory import get_ltm_service
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +335,15 @@ async def response_synthesizer_node(state: GraphState) -> GraphState:
     # Add final response message
     msgs.append(AIMessage(content=final_response))
     new_state["messages"] = msgs
+
+    # Store interaction in Long Term Memory (only in production mode)
+    if not should_use_mocks():
+        try:
+            ltm_service = get_ltm_service()
+            await ltm_service.store_from_state(new_state)
+            logger.debug("Successfully stored interaction in LTM")
+        except Exception as e:
+            logger.error(f"Failed to store interaction in LTM: {e}")
 
     # Set route to done - workflow is complete
     new_state["route"] = "done"
