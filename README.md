@@ -241,6 +241,7 @@ Each agent has a specific role and set of capabilities:
 - ✅ Final validation of concepts and approaches
 
 **Collaboration philosophy**: AI tools served as a highly capable technical assistant, while all design decisions, educational objectives, and project directions were defined and validated by the human.
+
 </details>
 
 ## 📄 License
